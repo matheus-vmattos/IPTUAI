@@ -1,0 +1,53 @@
+{
+  "name": "iptuai",
+  "productName": "IPTUAI",
+  "version": "1.0.0",
+  "description": "Assistente para lancamento de guias de IPTU",
+  "main": "electron/main.js",
+  "author": "IPTUAI",
+  "scripts": {
+    "dev:renderer": "vite",
+    "dev:electron": "wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
+    "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "build:renderer": "vite build",
+    "build": "npm run build:renderer && electron-builder",
+    "release": "npm run build:renderer && electron-builder --publish always"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "electron-updater": "^6.3.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^9.0.1",
+    "cross-env": "^7.0.3",
+    "electron": "^32.1.2",
+    "electron-builder": "^25.0.5",
+    "vite": "^5.4.6",
+    "wait-on": "^8.0.0"
+  },
+  "build": {
+    "appId": "com.iptuai.app",
+    "productName": "IPTUAI",
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "matheus-vmattos",
+        "repo": "iptuai"
+      }
+    ],
+    "mac": { "target": "dmg" },
+    "win": { "target": "nsis" },
+    "linux": { "target": "AppImage" }
+  }
+}

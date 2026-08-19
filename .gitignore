@@ -1,0 +1,18 @@
+node_modules/
+dist/
+dist-electron/
+release/
+*.log
+
+# backend runtime data
+backend/.env
+backend/data/
+backend/uploads/tmp/
+backend/uploads/iptus/
+
+# frontend build
+frontend/dist/
+frontend/dist-electron/
+frontend/release/
+
+.DS_Store
