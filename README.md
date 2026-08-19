@@ -20,6 +20,12 @@ está vencendo, o valor, marcar como paga e imprimir o arquivo original.
 
 ### 1. Backend
 
+**Windows (mais simples):** dentro da pasta `backend`, dê duplo-clique em
+`iniciar-servidor.bat`. Ele instala tudo automaticamente na primeira vez e
+sobe o servidor. Precisa ter o [Node.js](https://nodejs.org) instalado
+(baixe a versão LTS). Deixe essa janela aberta enquanto for usar o app.
+
+**Linha de comando (Mac/Linux/Windows):**
 ```bash
 cd backend
 npm install
@@ -29,7 +35,9 @@ npm run dev
 
 O servidor sobe em `http://localhost:4000`. Na primeira execução, um usuário
 administrador é criado automaticamente com o email/senha definidos em `.env`
-(padrão: `admin@iptuai.local`).
+(padrão: `admin@iptuai.local` / `troque-esta-senha` — a mensagem com essas
+credenciais também aparece no terminal ao iniciar). Troque a senha em `.env`
+antes de usar de verdade.
 
 ### 2. Frontend (app desktop)
 
