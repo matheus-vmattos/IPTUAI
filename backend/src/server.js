@@ -22,7 +22,7 @@ app.use('/parcelas', parcelasRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);
-  res.status(500).json({ error: 'Erro interno', detalhe: err.message });
+  res.status(500).json({ error: err.message || 'Erro interno' });
 });
 
 const PORT = process.env.PORT || 4000;

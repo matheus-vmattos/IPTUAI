@@ -70,6 +70,7 @@ export default function Upload() {
       setError(apiErrorMessage(err));
     } finally {
       setLoading(false);
+      e.target.value = '';
     }
   }
 
@@ -196,6 +197,11 @@ export default function Upload() {
             <button onClick={() => escolherTipoPagamento('unica')}>Parcela única</button>
             <button onClick={() => escolherTipoPagamento('parcelado')}>Parcelado</button>
           </div>
+          <div className="actions-row">
+            <button className="link-btn" onClick={() => setStep(0)}>
+              ← Voltar
+            </button>
+          </div>
         </div>
       )}
 
@@ -221,6 +227,11 @@ export default function Upload() {
               </button>
             </li>
           </ul>
+          <div className="actions-row">
+            <button className="link-btn" onClick={() => setEscolhendoCotaUnica(false)}>
+              ← Voltar
+            </button>
+          </div>
         </div>
       )}
 
@@ -230,6 +241,11 @@ export default function Upload() {
           <div className="choice-row">
             <button onClick={() => escolherFormaPagamento('imobiliaria')}>Imobiliária</button>
             <button onClick={() => escolherFormaPagamento('repassado')}>Repassado</button>
+          </div>
+          <div className="actions-row">
+            <button className="link-btn" onClick={() => setStep(1)}>
+              ← Voltar
+            </button>
           </div>
         </div>
       )}
@@ -303,6 +319,9 @@ export default function Upload() {
           )}
 
           <div className="actions-row">
+            <button className="link-btn" onClick={() => setStep(2)}>
+              ← Voltar
+            </button>
             <button
               disabled={!codigoImovel.trim() || !parcelasValidas()}
               onClick={() => setStep(4)}

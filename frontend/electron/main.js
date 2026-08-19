@@ -47,7 +47,8 @@ ipcMain.handle('print-pdf', async (event, base64) => {
     await printWin.loadFile(tmpPath);
     await new Promise((resolve, reject) => {
       printWin.webContents.print({ silent: false, printBackground: true }, (success, reason) => {
-        if (success) resolve();
+        // O usuario cancelar o dialogo de impressao e um fluxo normal, nao um erro.
+        if (success || reason === 'cancelled') resolve();
         else reject(new Error(reason));
       });
     });

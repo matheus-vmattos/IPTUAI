@@ -72,6 +72,13 @@ router.post('/', (req, res) => {
       return res.status(400).json({ error: 'Cada parcela precisa de numero, valor e vencimento' });
     }
   }
+  const numerosVistos = new Set();
+  for (const p of parcelas) {
+    if (numerosVistos.has(Number(p.numero))) {
+      return res.status(400).json({ error: `Numero de parcela ${p.numero} esta duplicado` });
+    }
+    numerosVistos.add(Number(p.numero));
+  }
 
   const tmpPath = path.join(TMP_DIR, path.basename(tempId));
   if (!fs.existsSync(tmpPath)) {
@@ -79,17 +86,6 @@ router.post('/', (req, res) => {
   }
 
   const codigoNorm = codigoImovel.trim().toUpperCase().replace(/\s+/g, ' ');
-  let imovel = db.prepare('SELECT * FROM imoveis WHERE codigo = ?').get(codigoNorm);
-  if (!imovel) {
-    const info = db
-      .prepare('INSERT INTO imoveis (codigo, created_by) VALUES (?, ?)')
-      .run(codigoNorm, req.user.sub);
-    imovel = db.prepare('SELECT * FROM imoveis WHERE id = ?').get(info.lastInsertRowid);
-  }
-
-  const finalName = `${crypto.randomUUID()}.pdf`;
-  const finalPath = path.join(FINAL_DIR, finalName);
-  fs.renameSync(tmpPath, finalPath);
 
   const insertIptu = db.prepare(`
     INSERT INTO iptus (imovel_id, exercicio, tipo_pagamento, forma_pagamento, arquivo_nome, arquivo_path, created_by)
@@ -99,28 +95,54 @@ router.post('/', (req, res) => {
     INSERT INTO parcelas (iptu_id, numero, valor, vencimento) VALUES (?, ?, ?, ?)
   `);
 
-  const iptuId = db.transaction(() => {
-    const info = insertIptu.run(
+  const finalName = `${crypto.randomUUID()}.pdf`;
+  const finalPath = path.join(FINAL_DIR, finalName);
+
+  const criarLancamento = db.transaction((caminhoRelativoArquivo) => {
+    let imovel = db.prepare('SELECT * FROM imoveis WHERE codigo = ?').get(codigoNorm);
+    if (!imovel) {
+      const infoImovel = db
+        .prepare('INSERT INTO imoveis (codigo, created_by) VALUES (?, ?)')
+        .run(codigoNorm, req.user.sub);
+      imovel = db.prepare('SELECT * FROM imoveis WHERE id = ?').get(infoImovel.lastInsertRowid);
+    }
+
+    const infoIptu = insertIptu.run(
       imovel.id,
       exercicio || null,
       tipoPagamento,
       formaPagamento,
       nomeOriginal || 'iptu.pdf',
-      path.relative(UPLOADS_DIR, finalPath),
+      caminhoRelativoArquivo,
       req.user.sub
     );
     for (const p of parcelas) {
-      insertParcela.run(info.lastInsertRowid, Number(p.numero), Number(p.valor), p.vencimento);
+      insertParcela.run(infoIptu.lastInsertRowid, Number(p.numero), Number(p.valor), p.vencimento);
     }
-    return info.lastInsertRowid;
-  })();
+    return { imovel, iptuId: infoIptu.lastInsertRowid };
+  });
 
-  const iptu = db.prepare('SELECT * FROM iptus WHERE id = ?').get(iptuId);
+  // So move o arquivo para o destino final depois que sabemos que o
+  // registro no banco foi gravado - assim uma falha na gravacao (ex:
+  // numero de parcela duplicado) nao deixa o PDF orfao nem obriga a
+  // pessoa a reenviar o arquivo do zero.
+  let resultado;
+  try {
+    fs.renameSync(tmpPath, finalPath);
+    resultado = criarLancamento(path.relative(UPLOADS_DIR, finalPath));
+  } catch (err) {
+    if (fs.existsSync(finalPath) && !fs.existsSync(tmpPath)) {
+      fs.renameSync(finalPath, tmpPath);
+    }
+    return res.status(400).json({ error: 'Nao foi possivel salvar o lancamento', detalhe: err.message });
+  }
+
+  const iptu = db.prepare('SELECT * FROM iptus WHERE id = ?').get(resultado.iptuId);
   const parcelasSalvas = db
     .prepare('SELECT * FROM parcelas WHERE iptu_id = ? ORDER BY numero')
-    .all(iptuId);
+    .all(resultado.iptuId);
 
-  res.status(201).json({ ...iptu, imovel, parcelas: parcelasSalvas });
+  res.status(201).json({ ...iptu, imovel: resultado.imovel, parcelas: parcelasSalvas });
 });
 
 router.get('/:id/arquivo', (req, res) => {
