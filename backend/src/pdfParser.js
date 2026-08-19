@@ -1,4 +1,3 @@
-const fs = require('fs');
 const pdfParse = require('pdf-parse');
 
 const DATE_RE = /(\d{2})[\/.-](\d{2})[\/.-](\d{4})/g;
@@ -94,8 +93,7 @@ function extrairCandidatas(flat) {
   });
 }
 
-async function extrairParcelas(filePath) {
-  const buffer = fs.readFileSync(filePath);
+async function extrairParcelas(buffer) {
   const data = await pdfParse(buffer);
   const flat = data.text.replace(/\s+/g, ' ').trim();
 

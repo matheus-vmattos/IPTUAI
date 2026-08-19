@@ -9,9 +9,12 @@ está vencendo, o valor, marcar como paga e imprimir o arquivo original.
 
 ## Arquitetura
 
-- **`backend/`** — API em Node.js/Express + SQLite. Guarda usuários, imóveis,
-  lançamentos de IPTU e parcelas, e os arquivos PDF enviados. É o servidor
-  central que todos os usuários (multiusuário) acessam.
+- **`backend/`** — API em Node.js/Express, banco SQLite (via
+  [Turso](https://turso.tech)/libSQL). Guarda usuários, imóveis, lançamentos
+  de IPTU, parcelas e os PDFs enviados (como BLOB no próprio banco — o
+  backend não depende de disco local, então roda em qualquer hospedagem
+  gratuita sem armazenamento persistente). É o servidor central que todos
+  os usuários (multiusuário) acessam.
 - **`frontend/`** — Aplicativo desktop em Electron + React, com build via
   `electron-builder` e atualização automática via `electron-updater` (usando
   GitHub Releases deste repositório).
@@ -66,29 +69,39 @@ desenvolvimento, ou o endereço do servidor real em produção) e as credenciais
 6. **Configurações**: trocar o endereço do servidor e cadastrar novos usuários
    da equipe (multiusuário).
 
-## Hospedando o backend na nuvem (Render)
+## Hospedando o backend na nuvem, de graça (Turso + Render)
 
 Para que a equipe use o app sem precisar rodar nada localmente, o backend
-precisa ficar hospedado em algum lugar sempre ligado. O jeito mais simples é o
-[Render](https://render.com), usando o arquivo `render.yaml` já incluído neste
-repositório:
+precisa ficar hospedado em algum lugar sempre ligado. Como o backend não
+depende de disco (os dados e os PDFs vivem no banco Turso), dá pra hospedar
+100% de graça, sem cartão de crédito:
+
+**1. Crie o banco de dados gratuito no Turso:**
+
+1. Crie uma conta em https://turso.tech (grátis, sem cartão).
+2. Crie um banco de dados (qualquer nome, ex: `iptuai`).
+3. Copie a **Database URL** (algo como `libsql://iptuai-seuusuario.turso.io`)
+   e gere um **Auth Token** — guarde os dois.
+
+**2. Suba o backend no Render usando o `render.yaml` deste repositório:**
 
 1. Crie uma conta gratuita em https://render.com (pode entrar com GitHub).
 2. No painel, clique em **New +** → **Blueprint**.
 3. Conecte este repositório (`matheus-vmattos/IPTUAI`) e selecione a branch
    `claude/iptu-helper-program-lgtuag`.
-4. O Render vai detectar o `render.yaml` automaticamente. Ele vai pedir para
-   você preencher `ADMIN_EMAIL` e `ADMIN_PASSWORD` (as credenciais do
-   primeiro usuário administrador) — escolha uma senha forte.
+4. O Render vai detectar o `render.yaml` e pedir para preencher:
+   - `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN` (do passo anterior)
+   - `ADMIN_EMAIL` e `ADMIN_PASSWORD` (login do primeiro usuário administrador)
 5. Clique em **Apply**. Em alguns minutos o serviço estará no ar, com uma URL
-   parecida com `https://iptuai-backend.onrender.com`.
+   parecida com `https://iptuai-backend.onrender.com` — sem custo nenhum.
 
-**Sobre custo:** o `render.yaml` usa o plano "Starter" com um disco
-persistente pequeno (necessário para não perder os dados a cada reinício —
-o plano gratuito do Render não tem disco persistente). O custo é baixo
-(na faixa de US$ 7/mês). Depois de publicado, ninguém da equipe precisa
-mexer em servidor, terminal ou configuração nenhuma — só abrir o app e
-logar.
+Depois de publicado, ninguém da equipe precisa mexer em servidor, terminal
+ou configuração nenhuma — só abrir o app e logar com a URL, email e senha
+que você definiu.
+
+> O plano gratuito do Render "dorme" o servidor após ~15 minutos sem uso e
+> demora alguns segundos para acordar na primeira requisição seguinte — isso
+> é normal e só afeta o primeiro carregamento após um tempo parado.
 
 ## Múltiplos usuários
 
@@ -102,8 +115,10 @@ Railway/Fly.io, ou um servidor interno). Depois disso:
 - Novos usuários são criados por alguém que já tem acesso, em
   **Configurações → Novo usuário da equipe**.
 
-O SQLite (`backend/data/iptuai.db`) e os PDFs enviados (`backend/uploads/`)
-ficam no servidor — inclua-os na sua rotina de backup.
+Em produção (com `TURSO_DATABASE_URL` configurado), todos os dados e PDFs
+ficam no banco Turso — sem depender do disco do servidor. Sem essa variável,
+o backend usa um arquivo SQLite local (`backend/data/iptuai.db`), útil só
+para desenvolvimento.
 
 ## Build do app desktop (com auto-update)
 

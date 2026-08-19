@@ -22,7 +22,7 @@ export default function Upload() {
   const [error, setError] = useState('');
   const [sucesso, setSucesso] = useState(null);
 
-  const [tempId, setTempId] = useState(null);
+  const [arquivo, setArquivo] = useState(null);
   const [nomeOriginal, setNomeOriginal] = useState('');
   const [parceladasSugeridas, setParceladasSugeridas] = useState([]);
   const [cotaUnicaSugerida, setCotaUnicaSugerida] = useState([]);
@@ -36,7 +36,7 @@ export default function Upload() {
 
   function reset() {
     setStep(0);
-    setTempId(null);
+    setArquivo(null);
     setNomeOriginal('');
     setParceladasSugeridas([]);
     setCotaUnicaSugerida([]);
@@ -61,7 +61,7 @@ export default function Upload() {
       const { data } = await api.post('/iptus/parse', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setTempId(data.tempId);
+      setArquivo(file);
       setNomeOriginal(data.nomeOriginal);
       setParceladasSugeridas(data.parceladas || []);
       setCotaUnicaSugerida(data.cotaUnica || []);
@@ -135,18 +135,25 @@ export default function Upload() {
     setError('');
     setLoading(true);
     try {
-      const { data } = await api.post('/iptus', {
-        tempId,
-        nomeOriginal,
-        codigoImovel,
-        exercicio,
-        tipoPagamento,
-        formaPagamento,
-        parcelas: parcelas.map((p) => ({
-          numero: Number(p.numero),
-          valor: Number(p.valor),
-          vencimento: p.vencimento,
-        })),
+      const form = new FormData();
+      form.append('arquivo', arquivo, nomeOriginal || arquivo.name);
+      form.append('codigoImovel', codigoImovel);
+      form.append('exercicio', exercicio);
+      form.append('tipoPagamento', tipoPagamento);
+      form.append('formaPagamento', formaPagamento);
+      form.append(
+        'parcelas',
+        JSON.stringify(
+          parcelas.map((p) => ({
+            numero: Number(p.numero),
+            valor: Number(p.valor),
+            vencimento: p.vencimento,
+          }))
+        )
+      );
+
+      const { data } = await api.post('/iptus', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
       setSucesso(data);
     } catch (err) {

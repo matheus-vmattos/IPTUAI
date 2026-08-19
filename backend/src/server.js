@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
-require('./db'); // garante schema + usuario admin antes de subir rotas
+const db = require('./db');
 
 const authRoutes = require('./routes/authRoutes');
 const imoveisRoutes = require('./routes/imoveisRoutes');
@@ -26,4 +26,12 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`IPTUAI backend rodando na porta ${PORT}`));
+
+db.init()
+  .then(() => {
+    app.listen(PORT, () => console.log(`IPTUAI backend rodando na porta ${PORT}`));
+  })
+  .catch((err) => {
+    console.error('Falha ao inicializar o banco de dados:', err);
+    process.exit(1);
+  });
