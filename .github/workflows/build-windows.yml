@@ -9,6 +9,9 @@ on:
       - 'frontend/**'
       - '.github/workflows/build-windows.yml'
 
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -28,10 +31,12 @@ jobs:
       - name: Build do renderer
         run: npm run build:renderer
 
-      - name: Empacotar instalador Windows
-        run: npx electron-builder --win nsis --publish never
+      - name: Empacotar e publicar instalador Windows como GitHub Release
+        run: npx electron-builder --win nsis --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publicar instalador como artefato
+      - name: Publicar instalador tambem como artefato do Actions
         uses: actions/upload-artifact@v4
         with:
           name: IPTUAI-Windows-Installer
