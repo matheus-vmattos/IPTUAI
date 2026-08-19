@@ -1,0 +1,39 @@
+name: Build Windows Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - '**'
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/build-windows.yml'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Build do renderer
+        run: npm run build:renderer
+
+      - name: Empacotar instalador Windows
+        run: npx electron-builder --win nsis --publish never
+
+      - name: Publicar instalador como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: IPTUAI-Windows-Installer
+          path: frontend/release/*.exe
+          retention-days: 30
