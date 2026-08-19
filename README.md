@@ -66,6 +66,30 @@ desenvolvimento, ou o endereço do servidor real em produção) e as credenciais
 6. **Configurações**: trocar o endereço do servidor e cadastrar novos usuários
    da equipe (multiusuário).
 
+## Hospedando o backend na nuvem (Render)
+
+Para que a equipe use o app sem precisar rodar nada localmente, o backend
+precisa ficar hospedado em algum lugar sempre ligado. O jeito mais simples é o
+[Render](https://render.com), usando o arquivo `render.yaml` já incluído neste
+repositório:
+
+1. Crie uma conta gratuita em https://render.com (pode entrar com GitHub).
+2. No painel, clique em **New +** → **Blueprint**.
+3. Conecte este repositório (`matheus-vmattos/IPTUAI`) e selecione a branch
+   `claude/iptu-helper-program-lgtuag`.
+4. O Render vai detectar o `render.yaml` automaticamente. Ele vai pedir para
+   você preencher `ADMIN_EMAIL` e `ADMIN_PASSWORD` (as credenciais do
+   primeiro usuário administrador) — escolha uma senha forte.
+5. Clique em **Apply**. Em alguns minutos o serviço estará no ar, com uma URL
+   parecida com `https://iptuai-backend.onrender.com`.
+
+**Sobre custo:** o `render.yaml` usa o plano "Starter" com um disco
+persistente pequeno (necessário para não perder os dados a cada reinício —
+o plano gratuito do Render não tem disco persistente). O custo é baixo
+(na faixa de US$ 7/mês). Depois de publicado, ninguém da equipe precisa
+mexer em servidor, terminal ou configuração nenhuma — só abrir o app e
+logar.
+
 ## Múltiplos usuários
 
 O backend é o único ponto de dados compartilhado — todos os apps desktop devem

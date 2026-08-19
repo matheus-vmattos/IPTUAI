@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: iptuai-backend
+    runtime: node
+    plan: starter
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: DB_PATH
+        value: /data/iptuai.db
+      - key: UPLOADS_DIR
+        value: /data/uploads
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+    disk:
+      name: iptuai-data
+      mountPath: /data
+      sizeGB: 1
