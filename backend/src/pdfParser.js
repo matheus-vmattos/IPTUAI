@@ -1,71 +1,125 @@
 const fs = require('fs');
 const pdfParse = require('pdf-parse');
 
-const DATE_RE = /(\d{2})[\/.-](\d{2})[\/.-](\d{4})/;
-const VALUE_RE = /(?:R\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2})/;
-const PARCELA_RE = /parcela\s*(?:n[ºo.]?\s*)?(\d{1,2})|(\d{1,2})\s*\/\s*\d{1,2}\s*(?:parcela)?|cota\s*(?:n[ºo.]?\s*)?(\d{1,2})/i;
+const DATE_RE = /(\d{2})[\/.-](\d{2})[\/.-](\d{4})/g;
+
+// Carnes de IPTU sao gerados por cada prefeitura com seu proprio layout, mas o
+// rotulo do valor da guia costuma usar uma dessas variacoes.
+const VALOR_PATTERNS = [
+  /Valor da Parcela c\/ ?Taxa:?\s*([\d.,]+)/gi,
+  /Valor com Taxa:?\s*([\d.,]+)/gi,
+  /Valor Parcela c\/ ?Taxas?:?\s*([\d.,]+)/gi,
+  /Valor do Documento:?\s*([\d.,]+)/gi,
+  /Valor Total:?\s*([\d.,]+)/gi,
+  /Valor a Pagar:?\s*([\d.,]+)/gi,
+];
+
+// Sinaliza que aquele valor/vencimento e uma alternativa de pagamento a vista
+// (comum ter varias guias de cota unica com desconto diferente por data).
+const COTA_UNICA_RE = /COTA\s*[UÚ]NICA|%\s*de\s*desconto/i;
+
+const CONTEXT_WINDOW = 350;
+const MAX_DATE_DISTANCE = 400;
 
 function parseValor(str) {
   return Number(str.replace(/\./g, '').replace(',', '.'));
 }
 
 function parseData(str) {
-  const m = str.match(DATE_RE);
+  const m = str.match(/(\d{2})[\/.-](\d{2})[\/.-](\d{4})/);
   if (!m) return null;
   const [, dd, mm, yyyy] = m;
   return `${yyyy}-${mm}-${dd}`;
 }
 
 /**
- * Extrai candidatos a parcela (numero, valor, vencimento) linha a linha.
- * Heuristica simples: cada linha que tiver uma data E um valor monetario
- * vira uma candidata. O numero da parcela e inferido da propria linha ou
- * da posicao (1a linha encontrada = parcela 1, etc). Isso e so um ponto de
- * partida - o usuario sempre revisa/edita antes de confirmar (fluxo hibrido).
+ * Extratores de texto de PDF (pdf-parse/pdf.js) nao preservam a ordem visual
+ * de layouts com colunas/campos posicionados livremente - rotulo e valor
+ * frequentemente terminam em linhas diferentes, fora de ordem. Por isso a
+ * extracao trabalha sobre o texto "achatado" (sem quebras de linha) e casa
+ * cada valor monetario rotulado com a data mais proxima dele no texto, em
+ * vez de exigir que estejam na mesma linha.
  */
-async function extrairParcelas(filePath) {
-  const buffer = fs.readFileSync(filePath);
-  const data = await pdfParse(buffer);
-  const linhas = data.text
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean);
-
-  const candidatas = [];
-  let ordem = 0;
-
-  for (const linha of linhas) {
-    const dataMatch = linha.match(DATE_RE);
-    const valorMatch = linha.match(VALUE_RE);
-    if (!dataMatch || !valorMatch) continue;
-
-    ordem += 1;
-    const parcelaMatch = linha.match(PARCELA_RE);
-    const numero = parcelaMatch
-      ? Number(parcelaMatch[1] || parcelaMatch[2] || parcelaMatch[3])
-      : ordem;
-
-    candidatas.push({
-      numero,
-      valor: parseValor(valorMatch[1]),
-      vencimento: parseData(dataMatch[0]),
-      linhaOriginal: linha,
-    });
+function extrairCandidatas(flat) {
+  const datas = [];
+  let m;
+  const dateRe = new RegExp(DATE_RE.source, DATE_RE.flags);
+  while ((m = dateRe.exec(flat))) {
+    datas.push({ index: m.index, texto: m[0] });
   }
 
-  // Remove duplicatas exatas (mesma data+valor) que aparecem por causa de
-  // cabecalho/rodape repetido no PDF.
+  function dataMaisProxima(idx) {
+    let melhor = null;
+    let menorDist = Infinity;
+    for (const d of datas) {
+      const dist = Math.abs(d.index - idx);
+      if (dist < menorDist) {
+        menorDist = dist;
+        melhor = d;
+      }
+    }
+    return menorDist <= MAX_DATE_DISTANCE ? melhor : null;
+  }
+
+  const candidatas = [];
+  for (const padrao of VALOR_PATTERNS) {
+    const re = new RegExp(padrao.source, padrao.flags);
+    let match;
+    while ((match = re.exec(flat))) {
+      const data = dataMaisProxima(match.index);
+      if (!data) continue;
+
+      const contexto = flat.slice(
+        Math.max(0, match.index - CONTEXT_WINDOW),
+        match.index + CONTEXT_WINDOW
+      );
+      const tipo = COTA_UNICA_RE.test(contexto) ? 'unica' : 'parcelado';
+
+      candidatas.push({
+        tipo,
+        valor: parseValor(match[1]),
+        vencimento: parseData(data.texto),
+      });
+    }
+  }
+
+  // Cada guia normalmente aparece impressa duas vezes no PDF (via do banco e
+  // via do contribuinte) - mantem so uma ocorrencia por valor+vencimento+tipo.
   const vistos = new Set();
-  const unicas = candidatas.filter((c) => {
-    const chave = `${c.numero}-${c.valor}-${c.vencimento}`;
+  return candidatas.filter((c) => {
+    const chave = `${c.tipo}-${c.valor}-${c.vencimento}`;
     if (vistos.has(chave)) return false;
     vistos.add(chave);
     return true;
   });
+}
+
+async function extrairParcelas(filePath) {
+  const buffer = fs.readFileSync(filePath);
+  const data = await pdfParse(buffer);
+  const flat = data.text.replace(/\s+/g, ' ').trim();
+
+  const candidatas = extrairCandidatas(flat);
+
+  // Parcelado: numera sequencialmente pela ordem de vencimento, ja que o
+  // numero da parcela impresso no PDF nem sempre e recuperavel de forma
+  // confiavel a partir do texto extraido.
+  const parceladas = candidatas
+    .filter((c) => c.tipo === 'parcelado')
+    .sort((a, b) => a.vencimento.localeCompare(b.vencimento))
+    .map((c, i) => ({ numero: i + 1, valor: c.valor, vencimento: c.vencimento }));
+
+  // Cota unica: podem existir varias guias alternativas (mesmo pagamento a
+  // vista, com valores diferentes conforme a data de pagamento/desconto).
+  const cotaUnica = candidatas
+    .filter((c) => c.tipo === 'unica')
+    .sort((a, b) => a.vencimento.localeCompare(b.vencimento))
+    .map((c) => ({ valor: c.valor, vencimento: c.vencimento }));
 
   return {
     textoBruto: data.text,
-    parcelasSugeridas: unicas,
+    parceladas,
+    cotaUnica,
   };
 }
 

@@ -7,15 +7,27 @@ function novaParcelaVazia(numero) {
   return { numero, valor: '', vencimento: '' };
 }
 
+function formatarMoeda(valor) {
+  return Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function formatarData(iso) {
+  const [ano, mes, dia] = iso.split('-');
+  return `${dia}/${mes}/${ano}`;
+}
+
 export default function Upload() {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [sucesso, setSucesso] = useState(null);
 
-  const [arquivo, setArquivo] = useState(null);
   const [tempId, setTempId] = useState(null);
   const [nomeOriginal, setNomeOriginal] = useState('');
+  const [parceladasSugeridas, setParceladasSugeridas] = useState([]);
+  const [cotaUnicaSugerida, setCotaUnicaSugerida] = useState([]);
+  const [escolhendoCotaUnica, setEscolhendoCotaUnica] = useState(false);
+
   const [tipoPagamento, setTipoPagamento] = useState('');
   const [formaPagamento, setFormaPagamento] = useState('');
   const [codigoImovel, setCodigoImovel] = useState('');
@@ -24,9 +36,11 @@ export default function Upload() {
 
   function reset() {
     setStep(0);
-    setArquivo(null);
     setTempId(null);
     setNomeOriginal('');
+    setParceladasSugeridas([]);
+    setCotaUnicaSugerida([]);
+    setEscolhendoCotaUnica(false);
     setTipoPagamento('');
     setFormaPagamento('');
     setCodigoImovel('');
@@ -39,7 +53,6 @@ export default function Upload() {
   async function handleArquivoChange(e) {
     const file = e.target.files[0];
     if (!file) return;
-    setArquivo(file);
     setError('');
     setLoading(true);
     try {
@@ -50,19 +63,11 @@ export default function Upload() {
       });
       setTempId(data.tempId);
       setNomeOriginal(data.nomeOriginal);
-      const sugestoes =
-        data.parcelasSugeridas.length > 0
-          ? data.parcelasSugeridas.map((p, i) => ({
-              numero: p.numero || i + 1,
-              valor: p.valor ?? '',
-              vencimento: p.vencimento ?? '',
-            }))
-          : [novaParcelaVazia(1)];
-      setParcelas(sugestoes);
+      setParceladasSugeridas(data.parceladas || []);
+      setCotaUnicaSugerida(data.cotaUnica || []);
       setStep(1);
     } catch (err) {
       setError(apiErrorMessage(err));
-      setArquivo(null);
     } finally {
       setLoading(false);
     }
@@ -70,9 +75,34 @@ export default function Upload() {
 
   function escolherTipoPagamento(tipo) {
     setTipoPagamento(tipo);
-    if (tipo === 'unica') {
-      setParcelas((prev) => [prev[0] || novaParcelaVazia(1)]);
+
+    if (tipo === 'parcelado') {
+      setParcelas(
+        parceladasSugeridas.length > 0
+          ? parceladasSugeridas.map((p) => ({ ...p, valor: String(p.valor) }))
+          : [novaParcelaVazia(1)]
+      );
+      setStep(2);
+      return;
     }
+
+    // tipo === 'unica'
+    if (cotaUnicaSugerida.length > 1) {
+      setEscolhendoCotaUnica(true);
+      return;
+    }
+    if (cotaUnicaSugerida.length === 1) {
+      const opcao = cotaUnicaSugerida[0];
+      setParcelas([{ numero: 1, valor: String(opcao.valor), vencimento: opcao.vencimento }]);
+    } else {
+      setParcelas([novaParcelaVazia(1)]);
+    }
+    setStep(2);
+  }
+
+  function escolherOpcaoCotaUnica(opcao) {
+    setParcelas([{ numero: 1, valor: opcao ? String(opcao.valor) : '', vencimento: opcao ? opcao.vencimento : '' }]);
+    setEscolhendoCotaUnica(false);
     setStep(2);
   }
 
@@ -159,13 +189,38 @@ export default function Upload() {
         </div>
       )}
 
-      {step === 1 && (
+      {step === 1 && !escolhendoCotaUnica && (
         <div className="card">
           <h3>2. Será pago em parcela única ou parcelado?</h3>
           <div className="choice-row">
             <button onClick={() => escolherTipoPagamento('unica')}>Parcela única</button>
             <button onClick={() => escolherTipoPagamento('parcelado')}>Parcelado</button>
           </div>
+        </div>
+      )}
+
+      {step === 1 && escolhendoCotaUnica && (
+        <div className="card">
+          <h3>O arquivo tem mais de uma opção de cota única. Qual foi usada?</h3>
+          <p className="meta">
+            É comum o carnê trazer várias guias de pagamento à vista, com valores diferentes
+            conforme a data (desconto por antecipação). Escolha a que corresponde ao pagamento
+            feito.
+          </p>
+          <ul className="resumo-list">
+            {cotaUnicaSugerida.map((opcao, i) => (
+              <li key={i}>
+                <button className="choice-item" onClick={() => escolherOpcaoCotaUnica(opcao)}>
+                  {formatarMoeda(opcao.valor)} — vencimento {formatarData(opcao.vencimento)}
+                </button>
+              </li>
+            ))}
+            <li>
+              <button className="link-btn" onClick={() => escolherOpcaoCotaUnica(null)}>
+                Nenhuma dessas — vou informar manualmente
+              </button>
+            </li>
+          </ul>
         </div>
       )}
 

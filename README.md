@@ -97,7 +97,16 @@ de todo mundo basta gerar uma nova versão e publicar um novo Release.
 
 ## Extração automática de parcelas
 
-A extração é híbrida: o backend lê o texto do PDF e procura linhas com data +
-valor monetário para sugerir as parcelas, mas o formato de carnê varia entre
-prefeituras, então a extração é só uma sugestão — sempre revise os valores,
-vencimentos e números antes de confirmar o lançamento.
+A extração é híbrida: o backend lê o texto do PDF e procura por valores
+rotulados (ex: "Valor da Parcela", "Valor com Taxa") associando-os à data de
+vencimento mais próxima no texto, já que PDFs de carnê raramente preservam a
+ordem visual dos campos ao extrair o texto. O formato varia entre
+prefeituras, então a extração é sempre uma sugestão — revise antes de
+confirmar.
+
+É comum o carnê trazer, no mesmo arquivo, tanto as guias de **cota única**
+(geralmente 2 ou 3 alternativas, com valores diferentes conforme a data —
+desconto por antecipação) quanto as guias de **parcelamento** (uma por mês).
+Quando você escolhe "parcela única" e o sistema encontra mais de uma
+alternativa de cota única no arquivo, ele pergunta qual delas foi
+efetivamente usada antes de seguir para a revisão final.

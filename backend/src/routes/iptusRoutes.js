@@ -36,11 +36,12 @@ router.post('/parse', upload.single('arquivo'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Envie um arquivo PDF' });
 
   try {
-    const { parcelasSugeridas } = await extrairParcelas(req.file.path);
+    const { parceladas, cotaUnica } = await extrairParcelas(req.file.path);
     res.json({
       tempId: req.file.filename,
       nomeOriginal: req.file.originalname,
-      parcelasSugeridas,
+      parceladas,
+      cotaUnica,
     });
   } catch (err) {
     fs.unlink(req.file.path, () => {});
