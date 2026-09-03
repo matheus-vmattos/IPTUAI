@@ -30,6 +30,12 @@ function startBackend() {
   backendProcess = fork(entry, [], {
     env: {
       ...process.env,
+      // Sem isso, um app EMPACOTADO tenta abrir outra instancia do proprio
+      // Electron.exe ao dar fork (o binario do app tambem e o "node" usado
+      // pra rodar o backend) - o backend nunca sobe e todo request do
+      // renderer falha com "Network Error". Em dev isso nao aparece porque
+      // o processo pai ja roda via `electron .`, nao o .exe empacotado.
+      ELECTRON_RUN_AS_NODE: '1',
       PORT: String(BACKEND_PORT),
       CONFIG_PATH: path.join(app.getPath('userData'), 'config.json'),
     },
@@ -103,13 +109,65 @@ ipcMain.handle('abrir-arquivo', async (event, caminho) => {
   if (erro) throw new Error(erro);
 });
 
+// --- Versao / auto-update ---------------------------------------------
+// checkForUpdatesAndNotify() (usado antes) baixa e notifica sozinho via
+// notificacao nativa do SO, sem dar controle nenhum pro app. Aqui o
+// autoUpdater roda "manual": o renderer pede a verificacao e recebe cada
+// evento (baixando, progresso, pronto pra instalar...) pra mostrar na tela
+// de Configuracoes.
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = false;
+
+function enviarStatusAtualizacao(status) {
+  mainWindow?.webContents.send('update-status', status);
+}
+
+autoUpdater.on('checking-for-update', () => enviarStatusAtualizacao({ estado: 'verificando' }));
+autoUpdater.on('update-available', (info) =>
+  enviarStatusAtualizacao({ estado: 'disponivel', versao: info.version })
+);
+autoUpdater.on('update-not-available', () => enviarStatusAtualizacao({ estado: 'atualizado' }));
+autoUpdater.on('download-progress', (progresso) =>
+  enviarStatusAtualizacao({ estado: 'baixando', percentual: Math.round(progresso.percent) })
+);
+autoUpdater.on('update-downloaded', (info) =>
+  enviarStatusAtualizacao({ estado: 'pronto', versao: info.version })
+);
+autoUpdater.on('error', (err) => enviarStatusAtualizacao({ estado: 'erro', mensagem: err.message }));
+
+ipcMain.handle('verificar-atualizacoes', async () => {
+  if (!app.isPackaged) {
+    enviarStatusAtualizacao({ estado: 'erro', mensagem: 'Só funciona no app instalado, não em desenvolvimento.' });
+    return;
+  }
+  try {
+    await autoUpdater.checkForUpdates();
+  } catch (err) {
+    enviarStatusAtualizacao({ estado: 'erro', mensagem: err.message });
+  }
+});
+
+ipcMain.handle('instalar-atualizacao', () => {
+  autoUpdater.quitAndInstall();
+});
+
+ipcMain.handle('versao-app', () => app.getVersion());
+
 app.whenReady().then(async () => {
   startBackend();
-  await waitForBackend();
+  const backendOk = await waitForBackend();
   createWindow();
 
-  if (!process.env.VITE_DEV_SERVER_URL) {
-    autoUpdater.checkForUpdatesAndNotify();
+  if (!backendOk) {
+    dialog.showErrorBox(
+      'IPTUAI',
+      'Não foi possível iniciar o servidor local do app. Feche e abra o IPTUAI de novo. ' +
+        'Se continuar acontecendo, verifique se o antivírus está bloqueando o aplicativo.'
+    );
+  }
+
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdates().catch(() => {});
   }
 
   app.on('activate', () => {

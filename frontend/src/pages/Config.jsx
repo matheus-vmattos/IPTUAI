@@ -1,11 +1,34 @@
 import { useEffect, useState } from 'react';
 import { api, apiErrorMessage } from '../api.js';
 
+function textoStatusAtualizacao(status) {
+  if (!status) return null;
+  switch (status.estado) {
+    case 'verificando':
+      return 'Verificando atualizações...';
+    case 'disponivel':
+      return `Nova versão ${status.versao} disponível — baixando...`;
+    case 'baixando':
+      return `Baixando atualização... ${status.percentual}%`;
+    case 'pronto':
+      return `Versão ${status.versao} pronta para instalar.`;
+    case 'atualizado':
+      return 'Você já está com a versão mais recente.';
+    case 'erro':
+      return `Erro ao verificar atualizações: ${status.mensagem}`;
+    default:
+      return null;
+  }
+}
+
 export default function Config() {
   const [config, setConfig] = useState(null);
   const [error, setError] = useState('');
   const [savedMsg, setSavedMsg] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const [versaoApp, setVersaoApp] = useState('');
+  const [statusAtualizacao, setStatusAtualizacao] = useState(null);
 
   async function carregar() {
     try {
@@ -19,6 +42,22 @@ export default function Config() {
   useEffect(() => {
     carregar();
   }, []);
+
+  useEffect(() => {
+    if (!window.electronAPI?.onUpdateStatus) return;
+    window.electronAPI.versaoApp?.().then(setVersaoApp);
+    const cancelar = window.electronAPI.onUpdateStatus(setStatusAtualizacao);
+    return cancelar;
+  }, []);
+
+  async function verificarAtualizacoes() {
+    if (!window.electronAPI?.verificarAtualizacoes) {
+      window.alert('Disponível só no app desktop instalado.');
+      return;
+    }
+    setStatusAtualizacao({ estado: 'verificando' });
+    await window.electronAPI.verificarAtualizacoes();
+  }
 
   async function salvar(updates) {
     setError('');
@@ -88,6 +127,22 @@ export default function Config() {
         <button onClick={escolherPasta} disabled={loading}>
           Escolher pasta...
         </button>
+      </section>
+
+      <section className="card">
+        <h3>Versão do app</h3>
+        <p className="meta">{versaoApp ? `Versão instalada: ${versaoApp}` : 'Disponível só no app desktop instalado.'}</p>
+
+        {statusAtualizacao && <p>{textoStatusAtualizacao(statusAtualizacao)}</p>}
+
+        <div className="actions-row">
+          <button onClick={verificarAtualizacoes} disabled={statusAtualizacao?.estado === 'verificando'}>
+            Verificar atualizações
+          </button>
+          {statusAtualizacao?.estado === 'pronto' && (
+            <button onClick={() => window.electronAPI.instalarAtualizacao()}>Reiniciar e instalar</button>
+          )}
+        </div>
       </section>
     </div>
   );

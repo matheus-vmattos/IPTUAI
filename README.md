@@ -44,6 +44,11 @@ Na primeira vez, abra **Configurações** dentro do app e:
 1. Escolha o arquivo `.xlsx` da planilha (ex: `Projeto_IPTU.xlsx`).
 2. Escolha a pasta onde os carnês em PDF devem ser salvos.
 
+Essa mesma tela mostra a **versão instalada** e tem um botão **"Verificar
+atualizações"** — o app já baixa sozinho ao abrir, mas dá pra forçar a
+checagem e ver o progresso do download ali, com um botão pra reiniciar e
+instalar assim que a atualização estiver pronta.
+
 ## Fluxo de uso
 
 1. **Lançar**: envie um ou vários PDFs de carnê de uma vez. Para cada um,
