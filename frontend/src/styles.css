@@ -96,7 +96,8 @@ label {
   color: #444;
 }
 
-input {
+input,
+select {
   display: block;
   width: 100%;
   margin-top: 4px;
@@ -104,6 +105,7 @@ input {
   border: 1px solid #d0d5dd;
   border-radius: 6px;
   font-size: 1rem;
+  font-family: inherit;
 }
 
 button {
@@ -203,6 +205,10 @@ button:disabled {
 
 .step-dot.active {
   background: #4f8df5;
+}
+
+.table-scroll {
+  overflow-x: auto;
 }
 
 .parcelas-table {

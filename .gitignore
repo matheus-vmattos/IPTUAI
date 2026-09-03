@@ -7,8 +7,6 @@ release/
 # backend runtime data
 backend/.env
 backend/data/
-backend/uploads/tmp/
-backend/uploads/iptus/
 
 # frontend build
 frontend/dist/

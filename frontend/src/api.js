@@ -1,33 +1,11 @@
 import axios from 'axios';
 
-const BACKEND_URL_KEY = 'iptuai:backendUrl';
-const TOKEN_KEY = 'iptuai:token';
+// App local: o backend roda embutido, na mesma máquina, sem login nem
+// multiusuário. A porta é fixa (ver backend/src/server.js e
+// electron/main.js, que sobe esse processo automaticamente).
+const BACKEND_URL = 'http://127.0.0.1:4317';
 
-export function getBackendUrl() {
-  return localStorage.getItem(BACKEND_URL_KEY) || 'http://localhost:4000';
-}
-
-export function setBackendUrl(url) {
-  localStorage.setItem(BACKEND_URL_KEY, url.replace(/\/+$/, ''));
-}
-
-export function getToken() {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setToken(token) {
-  if (token) localStorage.setItem(TOKEN_KEY, token);
-  else localStorage.removeItem(TOKEN_KEY);
-}
-
-export const api = axios.create();
-
-api.interceptors.request.use((config) => {
-  config.baseURL = getBackendUrl();
-  const token = getToken();
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+export const api = axios.create({ baseURL: BACKEND_URL });
 
 export function apiErrorMessage(err) {
   return err?.response?.data?.error || err.message || 'Erro inesperado';

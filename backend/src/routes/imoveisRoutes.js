@@ -1,24 +1,13 @@
 const express = require('express');
-const db = require('../db');
-const { requireAuth } = require('../auth');
+const excelStore = require('../excelStore');
 const asyncHandler = require('../asyncHandler');
 
 const router = express.Router();
-router.use(requireAuth);
-
-function normalizaCodigo(codigo) {
-  return codigo.trim().toUpperCase().replace(/\s+/g, ' ');
-}
 
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const busca = (req.query.q || '').trim();
-    const imoveis = busca
-      ? await db.all('SELECT * FROM imoveis WHERE codigo LIKE ? ORDER BY codigo', [
-          `%${normalizaCodigo(busca)}%`,
-        ])
-      : await db.all('SELECT * FROM imoveis ORDER BY codigo');
+    const imoveis = await excelStore.listImoveis(req.query.q || '');
     res.json(imoveis);
   })
 );
@@ -26,49 +15,39 @@ router.get(
 router.get(
   '/:codigo',
   asyncHandler(async (req, res) => {
-    const codigo = normalizaCodigo(req.params.codigo);
-    const imovel = await db.get('SELECT * FROM imoveis WHERE codigo = ?', [codigo]);
-    if (!imovel) return res.status(404).json({ error: 'Imovel nao encontrado' });
-
-    // arquivo_blob fica de fora aqui de proposito - so e buscado sob demanda
-    // na rota de download/impressao, para nao inflar essa resposta.
-    const iptus = await db.all(
-      `SELECT id, imovel_id, exercicio, tipo_pagamento, forma_pagamento, arquivo_nome, created_by, created_at
-       FROM iptus WHERE imovel_id = ? ORDER BY exercicio DESC, id DESC`,
-      [imovel.id]
-    );
-
-    const iptusComParcelas = [];
-    for (const iptu of iptus) {
-      const parcelas = await db.all('SELECT * FROM parcelas WHERE iptu_id = ? ORDER BY numero', [
-        iptu.id,
-      ]);
-      iptusComParcelas.push({ ...iptu, parcelas });
-    }
-
-    res.json({ ...imovel, iptus: iptusComParcelas });
+    const imovel = await excelStore.getImovel(req.params.codigo);
+    if (!imovel) return res.status(404).json({ error: 'Imóvel não encontrado na planilha' });
+    res.json(imovel);
   })
 );
 
-router.post(
-  '/',
+// Edicao livre: aceita qualquer subconjunto dos campos da linha (mesmos
+// nomes usados no resto da API: proprietario, nominalIptu, inscricaoIptu,
+// dati, quemPagaIptu, quemPagaDati, formaPgto, iptuCotaUnica, iptuParcela,
+// iptuUltimaParcela, datiCotaUnica, datiParcela, datiUltimaParcela,
+// linkCarne, iptuSalvo, iptuLancado, datiSalvo, datiLancado,
+// imovelDeRateio, obs). So funciona pra imovel ja existente.
+router.patch(
+  '/:codigo',
   asyncHandler(async (req, res) => {
-    const { codigo, endereco } = req.body;
-    if (!codigo || !codigo.trim()) {
-      return res.status(400).json({ error: 'Informe o codigo de identificacao (ex: I 213)' });
+    const resultado = await excelStore.atualizarImovel(req.params.codigo, req.body || {});
+    res.json(resultado);
+  })
+);
+
+router.patch(
+  '/:codigo/lancado',
+  asyncHandler(async (req, res) => {
+    const { tributo, status } = req.body;
+    if (!['IPTU', 'DATI'].includes(tributo)) {
+      return res.status(400).json({ error: 'tributo deve ser "IPTU" ou "DATI"' });
     }
-
-    const codigoNorm = normalizaCodigo(codigo);
-    const existente = await db.get('SELECT * FROM imoveis WHERE codigo = ?', [codigoNorm]);
-    if (existente) return res.json(existente);
-
-    const info = await db.run(
-      'INSERT INTO imoveis (codigo, endereco, created_by) VALUES (?, ?, ?)',
-      [codigoNorm, endereco || null, req.user.sub]
-    );
-
-    const imovel = await db.get('SELECT * FROM imoveis WHERE id = ?', [info.lastInsertRowid]);
-    res.status(201).json(imovel);
+    const resultado = await excelStore.marcarLancado({
+      codigo: req.params.codigo,
+      tributo,
+      status: status || 'Feito',
+    });
+    res.json(resultado);
   })
 );
 

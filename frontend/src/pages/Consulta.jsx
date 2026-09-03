@@ -1,48 +1,81 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, apiErrorMessage } from '../api.js';
 
 function formatarMoeda(valor) {
+  if (valor === null || valor === undefined || valor === '') return '—';
   return Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-function arrayBufferToBase64(buffer) {
-  const bytes = new Uint8Array(buffer);
-  const CHUNK_SIZE = 0x8000;
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK_SIZE));
+const CAMPOS_EDITAVEIS = [
+  'proprietario',
+  'nominalIptu',
+  'inscricaoIptu',
+  'dati',
+  'quemPagaIptu',
+  'quemPagaDati',
+  'formaPgto',
+  'iptuCotaUnica',
+  'iptuParcela',
+  'iptuUltimaParcela',
+  'datiCotaUnica',
+  'datiParcela',
+  'datiUltimaParcela',
+  'imovelDeRateio',
+  'obs',
+];
+
+function paraFormulario(imovel) {
+  const out = {};
+  for (const campo of CAMPOS_EDITAVEIS) {
+    const valor = imovel[campo];
+    out[campo] = valor === null || valor === undefined ? '' : String(valor);
   }
-  return btoa(binary);
-}
-
-function formatarData(iso) {
-  const [ano, mes, dia] = iso.split('-');
-  return `${dia}/${mes}/${ano}`;
-}
-
-function proximaParcelaVencendo(iptus) {
-  const pendentes = iptus
-    .flatMap((iptu) => iptu.parcelas.map((p) => ({ ...p, iptu })))
-    .filter((p) => p.status === 'pendente')
-    .sort((a, b) => a.vencimento.localeCompare(b.vencimento));
-  return pendentes[0] || null;
+  return out;
 }
 
 export default function Consulta() {
-  const [codigo, setCodigo] = useState('');
+  const [busca, setBusca] = useState('');
+  const [resultados, setResultados] = useState([]);
   const [imovel, setImovel] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [imprimindoId, setImprimindoId] = useState(null);
+  const [config, setConfig] = useState(null);
+
+  const [editando, setEditando] = useState(false);
+  const [form, setForm] = useState({});
+  const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    api
+      .get('/config')
+      .then(({ data }) => setConfig(data))
+      .catch(() => {});
+  }, []);
 
   async function buscar(e) {
     e?.preventDefault();
-    if (!codigo.trim()) return;
+    if (!busca.trim()) return;
     setError('');
     setLoading(true);
     setImovel(null);
+    setEditando(false);
     try {
-      const { data } = await api.get(`/imoveis/${encodeURIComponent(codigo.trim())}`);
+      const { data } = await api.get('/imoveis', { params: { q: busca.trim() } });
+      setResultados(data);
+      if (data.length === 1) abrirImovel(data[0].codigo);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function abrirImovel(codigo) {
+    setError('');
+    setLoading(true);
+    setEditando(false);
+    try {
+      const { data } = await api.get(`/imoveis/${encodeURIComponent(codigo)}`);
       setImovel(data);
     } catch (err) {
       setError(apiErrorMessage(err));
@@ -51,47 +84,61 @@ export default function Consulta() {
     }
   }
 
-  async function marcarStatus(parcelaId, status) {
+  async function marcarLancado(tributo) {
+    if (!imovel) return;
     try {
-      await api.patch(`/parcelas/${parcelaId}`, { status });
-      await buscar();
+      await api.patch(`/imoveis/${encodeURIComponent(imovel.codigo)}/lancado`, {
+        tributo,
+        status: 'Feito',
+      });
+      abrirImovel(imovel.codigo);
     } catch (err) {
       setError(apiErrorMessage(err));
     }
   }
 
-  async function imprimir(iptuId) {
-    setError('');
-    setImprimindoId(iptuId);
-    try {
-      const { data } = await api.get(`/iptus/${iptuId}/arquivo`, { responseType: 'arraybuffer' });
-      const base64 = arrayBufferToBase64(data);
+  async function abrirCarne() {
+    if (!imovel?.linkCarne) return;
+    if (window.electronAPI?.abrirArquivo) {
+      await window.electronAPI.abrirArquivo(imovel.linkCarne);
+    } else {
+      window.alert(`Arquivo salvo em: ${imovel.linkCarne}`);
+    }
+  }
 
-      if (window.electronAPI?.printPdfBuffer) {
-        await window.electronAPI.printPdfBuffer(base64);
-      } else {
-        const blob = new Blob([data], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        window.open(url, '_blank');
-      }
+  function iniciarEdicao() {
+    setForm(paraFormulario(imovel));
+    setEditando(true);
+  }
+
+  function atualizarCampo(campo, valor) {
+    setForm((prev) => ({ ...prev, [campo]: valor }));
+  }
+
+  async function salvarEdicao(e) {
+    e.preventDefault();
+    setError('');
+    setSalvando(true);
+    try {
+      await api.patch(`/imoveis/${encodeURIComponent(imovel.codigo)}`, form);
+      setEditando(false);
+      await abrirImovel(imovel.codigo);
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {
-      setImprimindoId(null);
+      setSalvando(false);
     }
   }
 
-  const proxima = imovel ? proximaParcelaVencendo(imovel.iptus) : null;
-
   return (
     <div className="page">
-      <h2>Consultar IPTU por código</h2>
+      <h2>Consultar imóvel</h2>
 
       <form className="inline-form" onSubmit={buscar}>
         <input
-          value={codigo}
-          onChange={(e) => setCodigo(e.target.value)}
-          placeholder="Código de identificação (ex: I 213)"
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Código, inscrição, proprietário..."
         />
         <button type="submit" disabled={loading}>
           {loading ? 'Buscando...' : 'Buscar'}
@@ -100,83 +147,199 @@ export default function Consulta() {
 
       {error && <div className="error">{error}</div>}
 
-      {imovel && (
-        <div className="resultado">
-          <h3>Imóvel {imovel.codigo}</h3>
-
-          {proxima ? (
-            <div className="card destaque">
-              <h4>Parcela vencendo</h4>
-              <p>
-                Parcela <strong>{proxima.numero}</strong> — {formatarMoeda(proxima.valor)} — vence em{' '}
-                <strong>{formatarData(proxima.vencimento)}</strong>
-              </p>
-              <p className="meta">
-                {proxima.iptu.exercicio && `Exercício ${proxima.iptu.exercicio} · `}
-                {proxima.iptu.tipo_pagamento === 'unica' ? 'Parcela única' : 'Parcelado'} ·{' '}
-                {proxima.iptu.forma_pagamento === 'imobiliaria' ? 'Pago pela imobiliária' : 'Repassado'}
-              </p>
-              <div className="actions-row">
-                <button onClick={() => marcarStatus(proxima.id, 'pago')}>Marcar como pago</button>
-                <button onClick={() => imprimir(proxima.iptu.id)} disabled={imprimindoId === proxima.iptu.id}>
-                  {imprimindoId === proxima.iptu.id ? 'Abrindo...' : 'Imprimir arquivo'}
+      {resultados.length > 1 && !imovel && (
+        <div className="card">
+          <h4>{resultados.length} resultado(s)</h4>
+          <ul className="resumo-list">
+            {resultados.map((r) => (
+              <li key={r.codigo}>
+                <button className="choice-item" onClick={() => abrirImovel(r.codigo)}>
+                  <strong>I {r.codigo}</strong> — {r.proprietario} ({r.inscricaoIptu || 'sem inscrição'})
                 </button>
-              </div>
-            </div>
-          ) : (
-            <div className="card">Nenhuma parcela pendente para este imóvel.</div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {imovel && !editando && (
+        <div className="resultado">
+          <div className="iptu-header">
+            <h3>Imóvel I {imovel.codigo} — {imovel.proprietario}</h3>
+            <button className="link-btn" onClick={iniciarEdicao}>
+              Editar
+            </button>
+          </div>
+          {imovel.nominalIptu && (
+            <p className="meta">Nome no carnê: {imovel.nominalIptu}</p>
           )}
 
-          <h4>Histórico de lançamentos</h4>
-          {imovel.iptus.map((iptu) => (
-            <div className="card" key={iptu.id}>
-              <div className="iptu-header">
-                <span>
-                  {iptu.exercicio ? `Exercício ${iptu.exercicio}` : iptu.arquivo_nome} ·{' '}
-                  {iptu.tipo_pagamento === 'unica' ? 'Parcela única' : 'Parcelado'} ·{' '}
-                  {iptu.forma_pagamento === 'imobiliaria' ? 'Imobiliária' : 'Repassado'}
-                </span>
-                <button onClick={() => imprimir(iptu.id)} disabled={imprimindoId === iptu.id}>
-                  {imprimindoId === iptu.id ? 'Abrindo...' : 'Imprimir'}
-                </button>
-              </div>
-              <table className="parcelas-table">
-                <thead>
-                  <tr>
-                    <th>Parcela</th>
-                    <th>Valor</th>
-                    <th>Vencimento</th>
-                    <th>Status</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {iptu.parcelas.map((p) => (
-                    <tr key={p.id}>
-                      <td>{p.numero}</td>
-                      <td>{formatarMoeda(p.valor)}</td>
-                      <td>{formatarData(p.vencimento)}</td>
-                      <td>
-                        <span className={`badge ${p.status}`}>{p.status}</span>
-                      </td>
-                      <td>
-                        {p.status === 'pendente' ? (
-                          <button className="link-btn" onClick={() => marcarStatus(p.id, 'pago')}>
-                            marcar pago
-                          </button>
-                        ) : (
-                          <button className="link-btn" onClick={() => marcarStatus(p.id, 'pendente')}>
-                            desfazer
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ))}
+          <div className="card">
+            <h4>IPTU</h4>
+            <ul className="resumo-list">
+              <li>Inscrição: {imovel.inscricaoIptu || '—'}</li>
+              <li>Quem paga: {imovel.quemPagaIptu || '—'}</li>
+              <li>Cota única: {formatarMoeda(imovel.iptuCotaUnica)}</li>
+              <li>Parcela: {formatarMoeda(imovel.iptuParcela)} {imovel.iptuUltimaParcela ? `(última: ${formatarMoeda(imovel.iptuUltimaParcela)})` : ''}</li>
+              <li>Total: {formatarMoeda(imovel.iptuTotalCalculado)}</li>
+              <li>
+                Lançado no sistema: <strong>{imovel.iptuLancado || 'Não'}</strong>{' '}
+                {imovel.iptuLancado !== 'Feito' && (
+                  <button className="link-btn" onClick={() => marcarLancado('IPTU')}>
+                    marcar como lançado
+                  </button>
+                )}
+              </li>
+            </ul>
+          </div>
+
+          <div className="card">
+            <h4>DATI</h4>
+            <ul className="resumo-list">
+              <li>Inscrição: {imovel.dati || '—'}</li>
+              <li>Quem paga: {imovel.quemPagaDati || '—'}</li>
+              <li>Cota única: {formatarMoeda(imovel.datiCotaUnica)}</li>
+              <li>Parcela: {formatarMoeda(imovel.datiParcela)} {imovel.datiUltimaParcela ? `(última: ${formatarMoeda(imovel.datiUltimaParcela)})` : ''}</li>
+              <li>Total: {formatarMoeda(imovel.datiTotalCalculado)}</li>
+              <li>
+                Lançado no sistema: <strong>{imovel.datiLancado || 'Não'}</strong>{' '}
+                {imovel.datiLancado !== 'Feito' && (
+                  <button className="link-btn" onClick={() => marcarLancado('DATI')}>
+                    marcar como lançado
+                  </button>
+                )}
+              </li>
+            </ul>
+          </div>
+
+          <div className="card destaque">
+            <h4>Resumo</h4>
+            <ul className="resumo-list">
+              <li>Forma de pagamento: {imovel.formaPgto || '—'}</li>
+              <li>
+                <strong>Valor a pagar: {formatarMoeda(imovel.valorAPagarCalculado)}</strong>
+              </li>
+              {imovel.imovelDeRateio && <li>Imóvel de rateio: {imovel.imovelDeRateio}</li>}
+              {imovel.obs && <li>OBS: {imovel.obs}</li>}
+            </ul>
+            {imovel.linkCarne && <button onClick={abrirCarne}>Abrir carnê salvo</button>}
+          </div>
         </div>
+      )}
+
+      {imovel && editando && (
+        <form className="resultado" onSubmit={salvarEdicao}>
+          <div className="iptu-header">
+            <h3>Editando imóvel I {imovel.codigo}</h3>
+            <button type="button" className="link-btn" onClick={() => setEditando(false)}>
+              Cancelar
+            </button>
+          </div>
+
+          <div className="card">
+            <h4>Identificação</h4>
+            <label>
+              Proprietário
+              <input value={form.proprietario} onChange={(e) => atualizarCampo('proprietario', e.target.value)} />
+            </label>
+            <label>
+              Nome no carnê (se diferente do proprietário)
+              <input value={form.nominalIptu} onChange={(e) => atualizarCampo('nominalIptu', e.target.value)} />
+            </label>
+            <label>
+              Inscrição IPTU
+              <input value={form.inscricaoIptu} onChange={(e) => atualizarCampo('inscricaoIptu', e.target.value)} />
+            </label>
+            <label>
+              Inscrição DATI
+              <input value={form.dati} onChange={(e) => atualizarCampo('dati', e.target.value)} />
+            </label>
+            <label>
+              Imóvel de rateio
+              <input value={form.imovelDeRateio} onChange={(e) => atualizarCampo('imovelDeRateio', e.target.value)} />
+            </label>
+          </div>
+
+          <div className="card">
+            <h4>IPTU</h4>
+            <label>
+              Quem paga
+              <select value={form.quemPagaIptu} onChange={(e) => atualizarCampo('quemPagaIptu', e.target.value)}>
+                <option value="">—</option>
+                {(config?.listas?.quemPagaOpcoes || []).map((op) => (
+                  <option key={op} value={op}>
+                    {op}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Cota única (R$)
+              <input type="number" step="0.01" value={form.iptuCotaUnica} onChange={(e) => atualizarCampo('iptuCotaUnica', e.target.value)} />
+            </label>
+            <label>
+              Parcela (R$)
+              <input type="number" step="0.01" value={form.iptuParcela} onChange={(e) => atualizarCampo('iptuParcela', e.target.value)} />
+            </label>
+            <label>
+              Última parcela (R$)
+              <input type="number" step="0.01" value={form.iptuUltimaParcela} onChange={(e) => atualizarCampo('iptuUltimaParcela', e.target.value)} />
+            </label>
+          </div>
+
+          <div className="card">
+            <h4>DATI</h4>
+            <label>
+              Quem paga
+              <select value={form.quemPagaDati} onChange={(e) => atualizarCampo('quemPagaDati', e.target.value)}>
+                <option value="">—</option>
+                {(config?.listas?.quemPagaOpcoes || []).map((op) => (
+                  <option key={op} value={op}>
+                    {op}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Cota única (R$)
+              <input type="number" step="0.01" value={form.datiCotaUnica} onChange={(e) => atualizarCampo('datiCotaUnica', e.target.value)} />
+            </label>
+            <label>
+              Parcela (R$)
+              <input type="number" step="0.01" value={form.datiParcela} onChange={(e) => atualizarCampo('datiParcela', e.target.value)} />
+            </label>
+            <label>
+              Última parcela (R$)
+              <input type="number" step="0.01" value={form.datiUltimaParcela} onChange={(e) => atualizarCampo('datiUltimaParcela', e.target.value)} />
+            </label>
+          </div>
+
+          <div className="card destaque">
+            <label>
+              Forma de pagamento
+              <select value={form.formaPgto} onChange={(e) => atualizarCampo('formaPgto', e.target.value)}>
+                <option value="">—</option>
+                {(config?.listas?.formaPgtoOpcoes || []).map((op) => (
+                  <option key={op} value={op}>
+                    {op}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Observações
+              <input value={form.obs} onChange={(e) => atualizarCampo('obs', e.target.value)} />
+            </label>
+            <div className="actions-row">
+              <button type="button" className="link-btn" onClick={() => setEditando(false)} disabled={salvando}>
+                Cancelar
+              </button>
+              <button type="submit" disabled={salvando}>
+                {salvando ? 'Salvando...' : 'Salvar alterações'}
+              </button>
+            </div>
+          </div>
+        </form>
       )}
     </div>
   );
