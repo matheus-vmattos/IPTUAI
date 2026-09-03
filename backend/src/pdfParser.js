@@ -121,4 +121,37 @@ async function extrairParcelas(buffer) {
   };
 }
 
-module.exports = { extrairParcelas };
+/**
+ * A planilha nao guarda vencimento por parcela - guarda so o valor de uma
+ * parcela "padrao" e, quando a ultima parcela tem valor diferente (comum
+ * por causa de arredondamento no rateio do IPTU pelo numero de parcelas),
+ * o valor dela separado. O total e calculado pela propria planilha como
+ * parcela*(N-1) + ultima.
+ */
+function resumirParcelas(parceladas) {
+  if (!parceladas || parceladas.length === 0) return { parcela: null, ultimaParcela: null };
+
+  const ordenadas = [...parceladas].sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+  const ultima = ordenadas[ordenadas.length - 1];
+  const demais = ordenadas.slice(0, -1);
+
+  // Valor mais frequente entre as parcelas (exceto a ultima) - e o que a
+  // planilha espera em "parcela". Se so existir a ultima, usa o valor dela.
+  const contagem = new Map();
+  for (const p of demais) {
+    contagem.set(p.valor, (contagem.get(p.valor) || 0) + 1);
+  }
+  let valorParcela = ultima.valor;
+  let maiorContagem = 0;
+  for (const [valor, count] of contagem) {
+    if (count > maiorContagem) {
+      maiorContagem = count;
+      valorParcela = valor;
+    }
+  }
+
+  const ultimaParcela = ultima.valor === valorParcela ? null : ultima.valor;
+  return { parcela: valorParcela, ultimaParcela };
+}
+
+module.exports = { extrairParcelas, resumirParcelas };

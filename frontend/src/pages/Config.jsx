@@ -1,73 +1,93 @@
-import { useState } from 'react';
-import { api, getBackendUrl, setBackendUrl, apiErrorMessage } from '../api.js';
+import { useEffect, useState } from 'react';
+import { api, apiErrorMessage } from '../api.js';
 
 export default function Config() {
-  const [backendUrl, setBackendUrlLocal] = useState(getBackendUrl());
+  const [config, setConfig] = useState(null);
+  const [error, setError] = useState('');
   const [savedMsg, setSavedMsg] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [userMsg, setUserMsg] = useState('');
-  const [userErr, setUserErr] = useState('');
-
-  function saveBackendUrl(e) {
-    e.preventDefault();
-    setBackendUrl(backendUrl);
-    setSavedMsg('Servidor salvo.');
-    setTimeout(() => setSavedMsg(''), 3000);
-  }
-
-  async function createUser(e) {
-    e.preventDefault();
-    setUserErr('');
-    setUserMsg('');
+  async function carregar() {
     try {
-      await api.post('/auth/users', { name, email, password });
-      setUserMsg(`Usuário ${email} criado com sucesso.`);
-      setName('');
-      setEmail('');
-      setPassword('');
+      const { data } = await api.get('/config');
+      setConfig(data);
     } catch (err) {
-      setUserErr(apiErrorMessage(err));
+      setError(apiErrorMessage(err));
     }
   }
+
+  useEffect(() => {
+    carregar();
+  }, []);
+
+  async function salvar(updates) {
+    setError('');
+    setLoading(true);
+    try {
+      const { data } = await api.put('/config', updates);
+      setConfig(data);
+      setSavedMsg('Salvo.');
+      setTimeout(() => setSavedMsg(''), 3000);
+      await carregar();
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function escolherPlanilha() {
+    if (!window.electronAPI?.escolherArquivoExcel) {
+      window.alert('Disponível só no app desktop.');
+      return;
+    }
+    const caminho = await window.electronAPI.escolherArquivoExcel();
+    if (caminho) await salvar({ xlsxPath: caminho });
+  }
+
+  async function escolherPasta() {
+    if (!window.electronAPI?.escolherPasta) {
+      window.alert('Disponível só no app desktop.');
+      return;
+    }
+    const caminho = await window.electronAPI.escolherPasta();
+    if (caminho) await salvar({ pdfFolder: caminho });
+  }
+
+  if (!config) return <div className="page">Carregando...</div>;
 
   return (
     <div className="page">
       <h2>Configurações</h2>
 
+      {error && <div className="error">{error}</div>}
+      {savedMsg && <div className="success">{savedMsg}</div>}
+
       <section className="card">
-        <h3>Servidor</h3>
-        <form onSubmit={saveBackendUrl} className="inline-form">
-          <input value={backendUrl} onChange={(e) => setBackendUrlLocal(e.target.value)} />
-          <button type="submit">Salvar</button>
-        </form>
-        {savedMsg && <div className="success">{savedMsg}</div>}
+        <h3>Planilha (.xlsx)</h3>
+        <p className="meta">{config.xlsxPath || 'Nenhuma planilha selecionada.'}</p>
+        {config.xlsxPath && !config.xlsxExists && (
+          <div className="error">Arquivo não encontrado nesse caminho.</div>
+        )}
+        <button onClick={escolherPlanilha} disabled={loading}>
+          Escolher planilha...
+        </button>
+
+        {config.listas && (
+          <ul className="resumo-list" style={{ marginTop: 16 }}>
+            <li>Exercício: {config.listas.exercicio}</li>
+            <li>Nº de parcelas do município: {config.listas.nParcelas}</li>
+          </ul>
+        )}
+        {config.listasErro && <div className="error">{config.listasErro}</div>}
       </section>
 
       <section className="card">
-        <h3>Novo usuário da equipe</h3>
-        <form onSubmit={createUser} className="stack-form">
-          <input placeholder="Nome" value={name} onChange={(e) => setName(e.target.value)} required />
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <input
-            type="password"
-            placeholder="Senha (mín. 6 caracteres)"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-          <button type="submit">Criar usuário</button>
-        </form>
-        {userMsg && <div className="success">{userMsg}</div>}
-        {userErr && <div className="error">{userErr}</div>}
+        <h3>Pasta para salvar os carnês (PDF)</h3>
+        <p className="meta">{config.pdfFolder || 'Nenhuma pasta selecionada.'}</p>
+        <button onClick={escolherPasta} disabled={loading}>
+          Escolher pasta...
+        </button>
       </section>
     </div>
   );

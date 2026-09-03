@@ -2,12 +2,9 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
-const db = require('./db');
-
-const authRoutes = require('./routes/authRoutes');
+const configRoutes = require('./routes/configRoutes');
 const imoveisRoutes = require('./routes/imoveisRoutes');
-const iptusRoutes = require('./routes/iptusRoutes');
-const parcelasRoutes = require('./routes/parcelasRoutes');
+const lancamentosRoutes = require('./routes/lancamentosRoutes');
 
 const app = express();
 app.use(cors());
@@ -15,23 +12,20 @@ app.use(express.json());
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 
-app.use('/auth', authRoutes);
+app.use('/config', configRoutes);
 app.use('/imoveis', imoveisRoutes);
-app.use('/iptus', iptusRoutes);
-app.use('/parcelas', parcelasRoutes);
+app.use('/lancamentos', lancamentosRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({ error: err.message || 'Erro interno' });
 });
 
-const PORT = process.env.PORT || 4000;
+// Backend local, sem login/multiusuário: roda só na máquina de quem está
+// usando o app e nunca precisa ficar acessível pela rede.
+const PORT = process.env.PORT || 4317;
+const HOST = '127.0.0.1';
 
-db.init()
-  .then(() => {
-    app.listen(PORT, () => console.log(`IPTUAI backend rodando na porta ${PORT}`));
-  })
-  .catch((err) => {
-    console.error('Falha ao inicializar o banco de dados:', err);
-    process.exit(1);
-  });
+app.listen(PORT, HOST, () => {
+  console.log(`IPTUAI backend local rodando em http://${HOST}:${PORT}`);
+});

@@ -2,47 +2,39 @@ import { useState } from 'react';
 import { api, apiErrorMessage } from '../api.js';
 
 function formatarMoeda(valor) {
+  if (valor === null || valor === undefined || valor === '') return '—';
   return Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-function arrayBufferToBase64(buffer) {
-  const bytes = new Uint8Array(buffer);
-  const CHUNK_SIZE = 0x8000;
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK_SIZE));
-  }
-  return btoa(binary);
-}
-
-function formatarData(iso) {
-  const [ano, mes, dia] = iso.split('-');
-  return `${dia}/${mes}/${ano}`;
-}
-
-function proximaParcelaVencendo(iptus) {
-  const pendentes = iptus
-    .flatMap((iptu) => iptu.parcelas.map((p) => ({ ...p, iptu })))
-    .filter((p) => p.status === 'pendente')
-    .sort((a, b) => a.vencimento.localeCompare(b.vencimento));
-  return pendentes[0] || null;
-}
-
 export default function Consulta() {
-  const [codigo, setCodigo] = useState('');
+  const [busca, setBusca] = useState('');
+  const [resultados, setResultados] = useState([]);
   const [imovel, setImovel] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [imprimindoId, setImprimindoId] = useState(null);
 
   async function buscar(e) {
     e?.preventDefault();
-    if (!codigo.trim()) return;
+    if (!busca.trim()) return;
     setError('');
     setLoading(true);
     setImovel(null);
     try {
-      const { data } = await api.get(`/imoveis/${encodeURIComponent(codigo.trim())}`);
+      const { data } = await api.get('/imoveis', { params: { q: busca.trim() } });
+      setResultados(data);
+      if (data.length === 1) abrirImovel(data[0].codigo);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function abrirImovel(codigo) {
+    setError('');
+    setLoading(true);
+    try {
+      const { data } = await api.get(`/imoveis/${encodeURIComponent(codigo)}`);
       setImovel(data);
     } catch (err) {
       setError(apiErrorMessage(err));
@@ -51,47 +43,37 @@ export default function Consulta() {
     }
   }
 
-  async function marcarStatus(parcelaId, status) {
+  async function marcarLancado(tributo) {
+    if (!imovel) return;
     try {
-      await api.patch(`/parcelas/${parcelaId}`, { status });
-      await buscar();
+      await api.patch(`/imoveis/${encodeURIComponent(imovel.codigo)}/lancado`, {
+        tributo,
+        status: 'Feito',
+      });
+      abrirImovel(imovel.codigo);
     } catch (err) {
       setError(apiErrorMessage(err));
     }
   }
 
-  async function imprimir(iptuId) {
-    setError('');
-    setImprimindoId(iptuId);
-    try {
-      const { data } = await api.get(`/iptus/${iptuId}/arquivo`, { responseType: 'arraybuffer' });
-      const base64 = arrayBufferToBase64(data);
-
-      if (window.electronAPI?.printPdfBuffer) {
-        await window.electronAPI.printPdfBuffer(base64);
-      } else {
-        const blob = new Blob([data], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        window.open(url, '_blank');
-      }
-    } catch (err) {
-      setError(apiErrorMessage(err));
-    } finally {
-      setImprimindoId(null);
+  async function abrirCarne() {
+    if (!imovel?.linkCarne) return;
+    if (window.electronAPI?.abrirArquivo) {
+      await window.electronAPI.abrirArquivo(imovel.linkCarne);
+    } else {
+      window.alert(`Arquivo salvo em: ${imovel.linkCarne}`);
     }
   }
-
-  const proxima = imovel ? proximaParcelaVencendo(imovel.iptus) : null;
 
   return (
     <div className="page">
-      <h2>Consultar IPTU por código</h2>
+      <h2>Consultar imóvel</h2>
 
       <form className="inline-form" onSubmit={buscar}>
         <input
-          value={codigo}
-          onChange={(e) => setCodigo(e.target.value)}
-          placeholder="Código de identificação (ex: I 213)"
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Código, inscrição, proprietário..."
         />
         <button type="submit" disabled={loading}>
           {loading ? 'Buscando...' : 'Buscar'}
@@ -100,82 +82,74 @@ export default function Consulta() {
 
       {error && <div className="error">{error}</div>}
 
+      {resultados.length > 1 && !imovel && (
+        <div className="card">
+          <h4>{resultados.length} resultado(s)</h4>
+          <ul className="resumo-list">
+            {resultados.map((r) => (
+              <li key={r.codigo}>
+                <button className="choice-item" onClick={() => abrirImovel(r.codigo)}>
+                  <strong>I {r.codigo}</strong> — {r.proprietario} ({r.inscricaoIptu || 'sem inscrição'})
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {imovel && (
         <div className="resultado">
-          <h3>Imóvel {imovel.codigo}</h3>
+          <h3>Imóvel I {imovel.codigo} — {imovel.proprietario}</h3>
 
-          {proxima ? (
-            <div className="card destaque">
-              <h4>Parcela vencendo</h4>
-              <p>
-                Parcela <strong>{proxima.numero}</strong> — {formatarMoeda(proxima.valor)} — vence em{' '}
-                <strong>{formatarData(proxima.vencimento)}</strong>
-              </p>
-              <p className="meta">
-                {proxima.iptu.exercicio && `Exercício ${proxima.iptu.exercicio} · `}
-                {proxima.iptu.tipo_pagamento === 'unica' ? 'Parcela única' : 'Parcelado'} ·{' '}
-                {proxima.iptu.forma_pagamento === 'imobiliaria' ? 'Pago pela imobiliária' : 'Repassado'}
-              </p>
-              <div className="actions-row">
-                <button onClick={() => marcarStatus(proxima.id, 'pago')}>Marcar como pago</button>
-                <button onClick={() => imprimir(proxima.iptu.id)} disabled={imprimindoId === proxima.iptu.id}>
-                  {imprimindoId === proxima.iptu.id ? 'Abrindo...' : 'Imprimir arquivo'}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="card">Nenhuma parcela pendente para este imóvel.</div>
-          )}
+          <div className="card">
+            <h4>IPTU</h4>
+            <ul className="resumo-list">
+              <li>Inscrição: {imovel.inscricaoIptu || '—'}</li>
+              <li>Quem paga: {imovel.quemPagaIptu || '—'}</li>
+              <li>Cota única: {formatarMoeda(imovel.iptuCotaUnica)}</li>
+              <li>Parcela: {formatarMoeda(imovel.iptuParcela)} {imovel.iptuUltimaParcela ? `(última: ${formatarMoeda(imovel.iptuUltimaParcela)})` : ''}</li>
+              <li>Total: {formatarMoeda(imovel.iptuTotalCalculado)}</li>
+              <li>
+                Lançado no sistema: <strong>{imovel.iptuLancado || 'Não'}</strong>{' '}
+                {imovel.iptuLancado !== 'Feito' && (
+                  <button className="link-btn" onClick={() => marcarLancado('IPTU')}>
+                    marcar como lançado
+                  </button>
+                )}
+              </li>
+            </ul>
+          </div>
 
-          <h4>Histórico de lançamentos</h4>
-          {imovel.iptus.map((iptu) => (
-            <div className="card" key={iptu.id}>
-              <div className="iptu-header">
-                <span>
-                  {iptu.exercicio ? `Exercício ${iptu.exercicio}` : iptu.arquivo_nome} ·{' '}
-                  {iptu.tipo_pagamento === 'unica' ? 'Parcela única' : 'Parcelado'} ·{' '}
-                  {iptu.forma_pagamento === 'imobiliaria' ? 'Imobiliária' : 'Repassado'}
-                </span>
-                <button onClick={() => imprimir(iptu.id)} disabled={imprimindoId === iptu.id}>
-                  {imprimindoId === iptu.id ? 'Abrindo...' : 'Imprimir'}
-                </button>
-              </div>
-              <table className="parcelas-table">
-                <thead>
-                  <tr>
-                    <th>Parcela</th>
-                    <th>Valor</th>
-                    <th>Vencimento</th>
-                    <th>Status</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {iptu.parcelas.map((p) => (
-                    <tr key={p.id}>
-                      <td>{p.numero}</td>
-                      <td>{formatarMoeda(p.valor)}</td>
-                      <td>{formatarData(p.vencimento)}</td>
-                      <td>
-                        <span className={`badge ${p.status}`}>{p.status}</span>
-                      </td>
-                      <td>
-                        {p.status === 'pendente' ? (
-                          <button className="link-btn" onClick={() => marcarStatus(p.id, 'pago')}>
-                            marcar pago
-                          </button>
-                        ) : (
-                          <button className="link-btn" onClick={() => marcarStatus(p.id, 'pendente')}>
-                            desfazer
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ))}
+          <div className="card">
+            <h4>DATI</h4>
+            <ul className="resumo-list">
+              <li>Inscrição: {imovel.dati || '—'}</li>
+              <li>Quem paga: {imovel.quemPagaDati || '—'}</li>
+              <li>Cota única: {formatarMoeda(imovel.datiCotaUnica)}</li>
+              <li>Parcela: {formatarMoeda(imovel.datiParcela)} {imovel.datiUltimaParcela ? `(última: ${formatarMoeda(imovel.datiUltimaParcela)})` : ''}</li>
+              <li>Total: {formatarMoeda(imovel.datiTotalCalculado)}</li>
+              <li>
+                Lançado no sistema: <strong>{imovel.datiLancado || 'Não'}</strong>{' '}
+                {imovel.datiLancado !== 'Feito' && (
+                  <button className="link-btn" onClick={() => marcarLancado('DATI')}>
+                    marcar como lançado
+                  </button>
+                )}
+              </li>
+            </ul>
+          </div>
+
+          <div className="card destaque">
+            <h4>Resumo</h4>
+            <ul className="resumo-list">
+              <li>Forma de pagamento: {imovel.formaPgto || '—'}</li>
+              <li>
+                <strong>Valor a pagar: {formatarMoeda(imovel.valorAPagarCalculado)}</strong>
+              </li>
+              {imovel.obs && <li>OBS: {imovel.obs}</li>}
+            </ul>
+            {imovel.linkCarne && <button onClick={abrirCarne}>Abrir carnê salvo</button>}
+          </div>
         </div>
       )}
     </div>

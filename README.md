@@ -1,129 +1,90 @@
 # IPTUAI
 
-Assistente para lançamento de guias de IPTU. Você sobe o PDF do carnê, o sistema
-tenta extrair automaticamente as parcelas (número, valor, vencimento), você
-revisa/confirma, escolhe se é parcela única ou parcelado e se é pago pela
-imobiliária ou repassado, e associa tudo a um código de identificação do imóvel
-(ex: `I 213`). Depois é possível consultar por esse código, ver qual parcela
-está vencendo, o valor, marcar como paga e imprimir o arquivo original.
+Assistente para lançamento de guias de IPTU/DATI direto na planilha de
+controle da equipe. Você sobe o PDF do carnê, o sistema tenta extrair
+automaticamente os valores (cota única ou parcela), você revisa/confirma,
+informa o código de identificação do imóvel (coluna `I` da planilha) e
+quem paga — e o app grava tudo direto na linha correspondente da sua
+`Projeto_IPTU.xlsx` (aba "IPTU"), sem passar por nenhum banco de dados
+intermediário.
 
 ## Arquitetura
 
-- **`backend/`** — API em Node.js/Express, banco SQLite (via
-  [Turso](https://turso.tech)/libSQL). Guarda usuários, imóveis, lançamentos
-  de IPTU, parcelas e os PDFs enviados (como BLOB no próprio banco — o
-  backend não depende de disco local, então roda em qualquer hospedagem
-  gratuita sem armazenamento persistente). É o servidor central que todos
-  os usuários (multiusuário) acessam.
-- **`frontend/`** — Aplicativo desktop em Electron + React, com build via
-  `electron-builder` e atualização automática via `electron-updater` (usando
-  GitHub Releases deste repositório).
+- **App local, sem servidor na nuvem e sem login.** É um aplicativo
+  desktop (Electron + React) que, ao abrir, sobe sozinho um backend local
+  (Node/Express, só na sua máquina, porta 4317) responsável por ler e
+  extrair os PDFs e por editar a planilha. Não há banco de dados: a
+  própria planilha `.xlsx` é o armazenamento.
+- **A planilha continua sendo a fonte de verdade.** O app não recria nem
+  reformata o arquivo — ele edita cirurgicamente só as células de dados
+  da linha do imóvel (valores, quem paga, forma de pagamento, link do
+  carnê, flags de "salvo/lançado"), preservando fórmulas, comentários,
+  formatação e qualquer outra aba exatamente como estavam. Se o código do
+  imóvel ainda não existir na planilha, uma linha nova é criada com as
+  mesmas fórmulas das demais.
+- **Uso sequencial.** Como é um arquivo Excel (não um banco), o app
+  pressupõe que uma pessoa lança de cada vez. Se o arquivo estiver numa
+  pasta de rede compartilhada, evite duas pessoas rodando o app e
+  lançando ao mesmo tempo.
 
 ## Rodando em desenvolvimento
 
-### 1. Backend
-
-**Windows (mais simples):** dentro da pasta `backend`, dê duplo-clique em
-`iniciar-servidor.bat`. Ele instala tudo automaticamente na primeira vez e
-sobe o servidor. Precisa ter o [Node.js](https://nodejs.org) instalado
-(baixe a versão LTS). Deixe essa janela aberta enquanto for usar o app.
-
-**Linha de comando (Mac/Linux/Windows):**
 ```bash
-cd backend
-npm install
-cp .env.example .env   # ajuste JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD
+cd backend && npm install
+cd ../frontend && npm install
 npm run dev
 ```
 
-O servidor sobe em `http://localhost:4000`. Na primeira execução, um usuário
-administrador é criado automaticamente com o email/senha definidos em `.env`
-(padrão: `admin@iptuai.local` / `troque-esta-senha` — a mensagem com essas
-credenciais também aparece no terminal ao iniciar). Troque a senha em `.env`
-antes de usar de verdade.
+O `npm run dev` do frontend sobe o Vite e abre a janela do Electron, que
+por sua vez já inicia o backend local automaticamente (não precisa abrir
+outro terminal nem rodar o backend separado).
 
-### 2. Frontend (app desktop)
+Na primeira vez, abra **Configurações** dentro do app e:
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Isso sobe o Vite (renderer) e abre a janela do Electron apontando para ele.
-Na tela de login, informe o endereço do backend (`http://localhost:4000` em
-desenvolvimento, ou o endereço do servidor real em produção) e as credenciais.
+1. Escolha o arquivo `.xlsx` da planilha (ex: `Projeto_IPTU.xlsx`).
+2. Escolha a pasta onde os carnês em PDF devem ser salvos.
 
 ## Fluxo de uso
 
-1. **Lançar IPTU**: envie o PDF do carnê. O sistema tenta extrair as parcelas
-   automaticamente (número, valor, vencimento) — esse é um ponto de partida:
-   revise e corrija os valores antes de confirmar.
-2. Escolha **parcela única ou parcelado**.
-3. Escolha se é pago **pela imobiliária ou repassado**.
-4. Informe o **código de identificação** do imóvel (ex: `I 213`). Se o código
-   já existir, o novo lançamento é associado ao mesmo imóvel.
-5. **Consultar**: digite o código de identificação para ver a parcela que
-   está vencendo, o valor, marcar parcelas como pagas e imprimir o arquivo
-   original do carnê.
-6. **Configurações**: trocar o endereço do servidor e cadastrar novos usuários
-   da equipe (multiusuário).
+1. **Lançar**: envie o PDF do carnê. O sistema tenta extrair
+   automaticamente o valor da cota única (ou das parcelas, identificando
+   o valor recorrente e o valor da última parcela quando diferente) —
+   revise antes de confirmar.
+2. Diga se o carnê é de **IPTU ou DATI**, se é **cota única ou
+   parcelado**, e o **código de identificação do imóvel** (coluna `I` da
+   planilha, ex: `213`). Se o código já existir, os dados são gravados na
+   linha existente; se não existir, uma linha nova é criada.
+3. Escolha **quem paga** (lista vem da própria planilha, aba "Listas").
+4. Confirme — os valores, o proprietário/inscrição e o link do PDF salvo
+   são gravados na linha do imóvel, e a coluna "salvo" desse tributo é
+   marcada como "Feito".
+5. **Consultar**: busque por código, inscrição ou proprietário para ver
+   os valores atuais (cota única, parcela, total calculado, valor a
+   pagar), marcar o tributo como lançado no sistema contábil da empresa,
+   e abrir o PDF do carnê salvo.
 
-## Hospedando o backend na nuvem, de graça (Turso + Render)
+## Extração automática de valores
 
-Para que a equipe use o app sem precisar rodar nada localmente, o backend
-precisa ficar hospedado em algum lugar sempre ligado. Como o backend não
-depende de disco (os dados e os PDFs vivem no banco Turso), dá pra hospedar
-100% de graça, sem cartão de crédito:
+A extração é híbrida: o backend lê o texto do PDF e procura por valores
+rotulados (ex: "Valor da Parcela c/ Taxa", "Valor com Taxa") associando-os
+à data de vencimento mais próxima no texto, já que PDFs de carnê raramente
+preservam a ordem visual dos campos ao extrair o texto. O formato varia
+entre prefeituras, então a extração é sempre uma sugestão — revise antes
+de confirmar.
 
-**1. Crie o banco de dados gratuito no Turso:**
-
-1. Crie uma conta em https://turso.tech (grátis, sem cartão).
-2. Crie um banco de dados (qualquer nome, ex: `iptuai`).
-3. Copie a **Database URL** (algo como `libsql://iptuai-seuusuario.turso.io`)
-   e gere um **Auth Token** — guarde os dois.
-
-**2. Suba o backend no Render usando o `render.yaml` deste repositório:**
-
-1. Crie uma conta gratuita em https://render.com (pode entrar com GitHub).
-2. No painel, clique em **New +** → **Blueprint**.
-3. Conecte este repositório (`matheus-vmattos/IPTUAI`) e selecione a branch
-   `claude/iptu-helper-program-lgtuag`.
-4. O Render vai detectar o `render.yaml` e pedir para preencher:
-   - `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN` (do passo anterior)
-   - `ADMIN_EMAIL` e `ADMIN_PASSWORD` (login do primeiro usuário administrador)
-5. Clique em **Apply**. Em alguns minutos o serviço estará no ar, com uma URL
-   parecida com `https://iptuai-backend.onrender.com` — sem custo nenhum.
-
-Depois de publicado, ninguém da equipe precisa mexer em servidor, terminal
-ou configuração nenhuma — só abrir o app e logar com a URL, email e senha
-que você definiu.
-
-> O plano gratuito do Render "dorme" o servidor após ~15 minutos sem uso e
-> demora alguns segundos para acordar na primeira requisição seguinte — isso
-> é normal e só afeta o primeiro carregamento após um tempo parado.
-
-## Múltiplos usuários
-
-O backend é o único ponto de dados compartilhado — todos os apps desktop devem
-apontar para o mesmo servidor. Para isso você precisa hospedar o `backend/`
-em algum lugar acessível pela rede da equipe (uma VPS, um serviço como Render/
-Railway/Fly.io, ou um servidor interno). Depois disso:
-
-- Cada pessoa da equipe abre o app, aponta para a URL do servidor em
-  **Configurações → Servidor** (ou na tela de login) e faz login.
-- Novos usuários são criados por alguém que já tem acesso, em
-  **Configurações → Novo usuário da equipe**.
-
-Em produção (com `TURSO_DATABASE_URL` configurado), todos os dados e PDFs
-ficam no banco Turso — sem depender do disco do servidor. Sem essa variável,
-o backend usa um arquivo SQLite local (`backend/data/iptuai.db`), útil só
-para desenvolvimento.
+É comum o carnê trazer, no mesmo arquivo, tanto as guias de **cota única**
+(geralmente 2 ou 3 alternativas, com valores diferentes conforme a data —
+desconto por antecipação) quanto as guias de **parcelamento** (uma por
+mês, com a última parcela costumando ter um valor levemente diferente por
+arredondamento). Quando há mais de uma alternativa de cota única, o app
+pergunta qual delas foi efetivamente usada antes de seguir para a revisão
+final.
 
 ## Build do app desktop (com auto-update)
 
 ```bash
-cd frontend
+cd backend && npm install   # o build empacota o backend inteiro (com node_modules) dentro do app
+cd ../frontend
 npm run build       # gera o instalador em frontend/release/, sem publicar
 npm run release      # gera e publica o instalador como GitHub Release
 ```
@@ -141,19 +102,3 @@ de todo mundo basta gerar uma nova versão e publicar um novo Release.
 > Nota: instaladores do Windows não assinados digitalmente mostram um aviso
 > do SmartScreen na primeira execução. Isso é esperado sem um certificado de
 > assinatura de código.
-
-## Extração automática de parcelas
-
-A extração é híbrida: o backend lê o texto do PDF e procura por valores
-rotulados (ex: "Valor da Parcela", "Valor com Taxa") associando-os à data de
-vencimento mais próxima no texto, já que PDFs de carnê raramente preservam a
-ordem visual dos campos ao extrair o texto. O formato varia entre
-prefeituras, então a extração é sempre uma sugestão — revise antes de
-confirmar.
-
-É comum o carnê trazer, no mesmo arquivo, tanto as guias de **cota única**
-(geralmente 2 ou 3 alternativas, com valores diferentes conforme a data —
-desconto por antecipação) quanto as guias de **parcelamento** (uma por mês).
-Quando você escolhe "parcela única" e o sistema encontra mais de uma
-alternativa de cota única no arquivo, ele pergunta qual delas foi
-efetivamente usada antes de seguir para a revisão final.

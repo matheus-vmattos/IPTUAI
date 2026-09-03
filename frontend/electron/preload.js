@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  printWindow: () => ipcRenderer.invoke('print-window'),
-  printPdfBuffer: (base64) => ipcRenderer.invoke('print-pdf', base64),
+  escolherArquivoExcel: () => ipcRenderer.invoke('escolher-arquivo-excel'),
+  escolherPasta: () => ipcRenderer.invoke('escolher-pasta'),
+  abrirArquivo: (caminho) => ipcRenderer.invoke('abrir-arquivo', caminho),
 });

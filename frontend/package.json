@@ -36,6 +36,17 @@
       "dist/**/*",
       "electron/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "../backend",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!.env",
+          "!data/**"
+        ]
+      }
+    ],
     "directories": {
       "output": "release"
     },
