@@ -49,7 +49,7 @@ function startBackend() {
   });
 }
 
-function waitForBackend(timeoutMs = 8000) {
+function waitForBackend(timeoutMs = 25000) {
   const start = Date.now();
   return new Promise((resolve) => {
     (function tentar() {
@@ -140,9 +140,11 @@ ipcMain.handle('exportar-pdf', async (event, { html, nomeArquivoSugerido }) => {
 // notificacao nativa do SO, sem dar controle nenhum pro app. Aqui o
 // autoUpdater roda "manual": o renderer pede a verificacao e recebe cada
 // evento (baixando, progresso, pronto pra instalar...) pra mostrar na tela
-// de Configuracoes.
+// de Configuracoes. autoInstallOnAppQuit continua true pra quem nunca
+// clica em "reiniciar e instalar" tambem receber a atualizacao sozinho
+// (ela e aplicada no proximo fechar+abrir do app).
 autoUpdater.autoDownload = true;
-autoUpdater.autoInstallOnAppQuit = false;
+autoUpdater.autoInstallOnAppQuit = true;
 
 function enviarStatusAtualizacao(status) {
   mainWindow?.webContents.send('update-status', status);
@@ -187,8 +189,9 @@ app.whenReady().then(async () => {
   if (!backendOk) {
     dialog.showErrorBox(
       'IPTUAI',
-      'Não foi possível iniciar o servidor local do app. Feche e abra o IPTUAI de novo. ' +
-        'Se continuar acontecendo, verifique se o antivírus está bloqueando o aplicativo.'
+      'O app demorou demais pra iniciar o servidor local. Feche e abra o IPTUAI de novo - ' +
+        'costuma resolver, principalmente logo depois de uma atualização. Se continuar ' +
+        'acontecendo, me avise.'
     );
   }
 

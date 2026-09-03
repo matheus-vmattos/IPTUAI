@@ -1,7 +1,7 @@
 {
   "name": "iptuai",
   "productName": "IPTUAI",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Assistente para lancamento de guias de IPTU",
   "main": "electron/main.js",
   "author": "IPTUAI",
