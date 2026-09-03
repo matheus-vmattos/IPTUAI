@@ -6,6 +6,7 @@ const configRoutes = require('./routes/configRoutes');
 const imoveisRoutes = require('./routes/imoveisRoutes');
 const lancamentosRoutes = require('./routes/lancamentosRoutes');
 const proprietariosRoutes = require('./routes/proprietariosRoutes');
+const exercicioRoutes = require('./routes/exercicioRoutes');
 
 const app = express();
 app.use(cors());
@@ -17,6 +18,7 @@ app.use('/config', configRoutes);
 app.use('/imoveis', imoveisRoutes);
 app.use('/lancamentos', lancamentosRoutes);
 app.use('/proprietarios', proprietariosRoutes);
+app.use('/exercicio', exercicioRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);

@@ -21,6 +21,20 @@ router.get(
   })
 );
 
+// Edicao livre: aceita qualquer subconjunto dos campos da linha (mesmos
+// nomes usados no resto da API: proprietario, nominalIptu, inscricaoIptu,
+// dati, quemPagaIptu, quemPagaDati, formaPgto, iptuCotaUnica, iptuParcela,
+// iptuUltimaParcela, datiCotaUnica, datiParcela, datiUltimaParcela,
+// linkCarne, iptuSalvo, iptuLancado, datiSalvo, datiLancado,
+// imovelDeRateio, obs). So funciona pra imovel ja existente.
+router.patch(
+  '/:codigo',
+  asyncHandler(async (req, res) => {
+    const resultado = await excelStore.atualizarImovel(req.params.codigo, req.body || {});
+    res.json(resultado);
+  })
+);
+
 router.patch(
   '/:codigo/lancado',
   asyncHandler(async (req, res) => {

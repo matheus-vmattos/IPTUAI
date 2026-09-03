@@ -13,6 +13,7 @@ const {
   cellValue,
   buildDataCell,
   setCellsInRow,
+  clearCellsInRow,
 } = require('./excel/sheetEditor');
 const { COLUMNS, FORMULA_COLUMNS, FORMULA_TEMPLATES } = require('./excel/columns');
 
@@ -356,6 +357,131 @@ async function marcarLancado({ codigo, tributo, status }) {
   });
 }
 
+const CAMPOS_NUMERICOS = new Set([
+  'iptuCotaUnica',
+  'iptuParcela',
+  'iptuUltimaParcela',
+  'datiCotaUnica',
+  'datiParcela',
+  'datiUltimaParcela',
+]);
+
+// Edicao livre de um imovel ja existente: aceita qualquer subconjunto dos
+// campos de dado da linha (sem as regras do wizard de lancamento, tipo
+// "cotaUnica" ou "quemPaga" exigidos). Nao mexe no codigo (coluna I) - pra
+// isso e melhor lancar de novo com o codigo certo do que renomear a linha.
+async function atualizarImovel(codigo, camposLivres) {
+  const { codigo: _ignorado, ...brutos } = camposLivres || {};
+
+  // Campos de valor precisam virar numero de verdade - se chegar string
+  // (ex: vindo de um formulario/JSON) a celula seria gravada como texto e
+  // as formulas de total da planilha parariam de calcular.
+  const campos = {};
+  for (const [campo, valor] of Object.entries(brutos)) {
+    if (CAMPOS_NUMERICOS.has(campo) && typeof valor === 'string' && valor.trim() !== '') {
+      const num = Number(valor);
+      if (Number.isNaN(num)) throw new Error(`Valor inválido em "${campo}": ${valor}`);
+      campos[campo] = num;
+    } else {
+      campos[campo] = valor;
+    }
+  }
+
+  return withWriteLock(async () => {
+    const xlsxPath = await requireXlsxPath();
+    const zip = await loadZip(xlsxPath);
+    const sheetXml = await zip.file(SHEET_PATH).async('string');
+    const sharedStringsXml = await zip.file(SHARED_STRINGS_PATH).async('string');
+    const sharedStrings = parseSharedStrings(sharedStringsXml);
+    const { rows } = indexRows(sheetXml);
+
+    const rowNum = findRowByCodigo(rows, sharedStrings, codigo);
+    if (!rowNum) throw new Error(`Imóvel com código "${codigo}" não encontrado na planilha`);
+
+    const info = rows.get(rowNum);
+    const newRowXml = setCellsInRow(info.xml, rowNum, mapFieldsToColumns(campos));
+    const newSheetXml = sheetXml.slice(0, info.start) + newRowXml + sheetXml.slice(info.end);
+
+    zip.file(SHEET_PATH, newSheetXml);
+    await saveZipAtomically(zip, xlsxPath);
+    return { codigo, rowNum };
+  });
+}
+
+// Campos que dependem do exercicio corrente e devem ser limpos na virada de
+// ano - o resto (proprietario, nomes, inscricoes, rateio, OBS) e cadastral
+// e continua valendo pro ano novo.
+const CAMPOS_VIRADA_DE_ANO = [
+  'quemPagaIptu',
+  'quemPagaDati',
+  'formaPgto',
+  'iptuCotaUnica',
+  'iptuParcela',
+  'iptuUltimaParcela',
+  'datiCotaUnica',
+  'datiParcela',
+  'datiUltimaParcela',
+  'linkCarne',
+  'iptuSalvo',
+  'iptuLancado',
+  'datiSalvo',
+  'datiLancado',
+];
+
+// Virada de exercicio: faz backup do arquivo original, limpa os campos de
+// "arranjo de pagamento" do ano anterior em toda a tabela e atualiza o
+// exercicio (Listas!B4). Mantem tudo que e cadastral (proprietario, nomes,
+// inscricoes, rateio, OBS).
+async function iniciarNovoExercicio(novoAno) {
+  const ano = Number(novoAno);
+  if (!Number.isInteger(ano) || ano < 2000 || ano > 2200) {
+    throw new Error('Informe um ano válido (ex: 2027)');
+  }
+
+  return withWriteLock(async () => {
+    const xlsxPath = await requireXlsxPath();
+
+    const dir = path.dirname(xlsxPath);
+    const ext = path.extname(xlsxPath);
+    const nomeBase = path.basename(xlsxPath, ext);
+    const backupPath = path.join(dir, `${nomeBase} - backup antes de ${ano}${ext}`);
+    await fs.copyFile(xlsxPath, backupPath);
+
+    const zip = await loadZip(xlsxPath);
+    const sheetXml = await zip.file(SHEET_PATH).async('string');
+    const { rows, maxRow } = indexRows(sheetXml);
+
+    const colsParaLimpar = CAMPOS_VIRADA_DE_ANO.map((campo) => COLUMNS[campo]);
+
+    let novoSheetXml = sheetXml;
+    let linhasLimpas = 0;
+    // de tras pra frente: cada substituicao usa o start/end calculado sobre
+    // o sheetXml original, entao so funciona se as linhas ja processadas
+    // (depois na string) nao deslocarem a posicao das que faltam (antes).
+    for (let r = maxRow; r >= 2; r--) {
+      const info = rows.get(r);
+      if (!info) continue;
+      const novaLinha = clearCellsInRow(info.xml, colsParaLimpar);
+      novoSheetXml = novoSheetXml.slice(0, info.start) + novaLinha + novoSheetXml.slice(info.end);
+      linhasLimpas += 1;
+    }
+    zip.file(SHEET_PATH, novoSheetXml);
+
+    const listasXml = await zip.file(LISTAS_PATH).async('string');
+    const { rows: listasRows } = indexRows(listasXml);
+    const linhaExercicio = listasRows.get(4);
+    if (linhaExercicio) {
+      const novaLinha = setCellsInRow(linhaExercicio.xml, 4, { B: ano });
+      const novoListasXml =
+        listasXml.slice(0, linhaExercicio.start) + novaLinha + listasXml.slice(linhaExercicio.end);
+      zip.file(LISTAS_PATH, novoListasXml);
+    }
+
+    await saveZipAtomically(zip, xlsxPath);
+    return { ano, backupPath, linhasLimpas };
+  });
+}
+
 async function listarProprietarios(query) {
   const xlsxPath = await requireXlsxPath();
   const zip = await loadZip(xlsxPath);
@@ -457,6 +583,8 @@ module.exports = {
   getImovel,
   lancarTributo,
   marcarLancado,
+  atualizarImovel,
+  iniciarNovoExercicio,
   listarProprietarios,
   getResumoProprietario,
 };

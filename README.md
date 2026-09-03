@@ -72,12 +72,20 @@ instalar assim que a atualização estiver pronta.
 5. **Consultar**: busque por código, inscrição ou proprietário para ver
    os valores atuais (cota única, parcela, total calculado, valor a
    pagar), marcar o tributo como lançado no sistema contábil da empresa,
-   e abrir o PDF do carnê salvo.
+   abrir o PDF do carnê salvo, ou **editar livremente** qualquer campo do
+   imóvel (útil pra corrigir algo sem precisar relançar o carnê inteiro).
 6. **Proprietários**: painel com o resumo de todos os imóveis de um
    proprietário — quantos IPTUs, valor total (cota única e parcelado),
    quantos cada forma de pagamento ("Valoriza paga", repassado etc.) e
    quantos códigos `I` compartilham a mesma inscrição (útil pra achar
-   imóveis de rateio, onde uma inscrição é dividida em várias linhas).
+   imóveis de rateio, onde uma inscrição é dividida em várias linhas). O
+   botão **"Gerar PDF"** exporta um resumo enxuto pra imprimir ou enviar.
+7. **Virada de exercício** (em Configurações): quando começar um ano novo,
+   limpa de uma vez os valores/status/quem paga/forma de pagamento
+   lançados de **todos os imóveis**, mantendo proprietário, nome no
+   carnê, inscrições, rateio e OBS — assim não precisa recadastrar nada
+   que não muda de ano pra ano. Faz backup automático do arquivo antes de
+   limpar.
 
 ## Extração automática de valores
 

@@ -30,6 +30,12 @@ export default function Config() {
   const [versaoApp, setVersaoApp] = useState('');
   const [statusAtualizacao, setStatusAtualizacao] = useState(null);
 
+  const [viradaAberta, setViradaAberta] = useState(false);
+  const [novoAno, setNovoAno] = useState('');
+  const [confirmado, setConfirmado] = useState(false);
+  const [virando, setVirando] = useState(false);
+  const [resultadoVirada, setResultadoVirada] = useState(null);
+
   async function carregar() {
     try {
       const { data } = await api.get('/config');
@@ -84,6 +90,28 @@ export default function Config() {
     if (caminho) await salvar({ xlsxPath: caminho });
   }
 
+  function abrirVirada() {
+    setNovoAno(config.listas?.exercicio ? String(Number(config.listas.exercicio) + 1) : '');
+    setConfirmado(false);
+    setResultadoVirada(null);
+    setViradaAberta(true);
+  }
+
+  async function confirmarVirada() {
+    setError('');
+    setVirando(true);
+    try {
+      const { data } = await api.post('/exercicio/novo', { ano: Number(novoAno) });
+      setResultadoVirada(data);
+      setViradaAberta(false);
+      await carregar();
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setVirando(false);
+    }
+  }
+
   async function escolherPasta() {
     if (!window.electronAPI?.escolherPasta) {
       window.alert('Disponível só no app desktop.');
@@ -120,6 +148,56 @@ export default function Config() {
         )}
         {config.listasErro && <div className="error">{config.listasErro}</div>}
       </section>
+
+      {config.listas && (
+        <section className="card">
+          <h3>Virada de exercício</h3>
+          <p className="meta">
+            Exercício atual: <strong>{config.listas.exercicio}</strong>
+          </p>
+
+          {resultadoVirada && (
+            <div className="success">
+              Exercício {resultadoVirada.ano} iniciado — {resultadoVirada.linhasLimpas} imóve(is) tiveram os valores
+              limpos. Backup do arquivo anterior salvo em: {resultadoVirada.backupPath}
+            </div>
+          )}
+
+          {!viradaAberta ? (
+            <button onClick={abrirVirada}>Iniciar novo exercício...</button>
+          ) : (
+            <div className="card" style={{ background: '#fde8e8', marginTop: 12 }}>
+              <p>
+                Isso vai <strong>limpar, em todos os imóveis</strong>: cota única, parcela, última parcela, quem
+                paga, forma de pagamento, link do carnê e os status "salvo"/"lançado" — de IPTU e DATI. Proprietário,
+                nome no carnê, inscrições, imóvel de rateio e OBS <strong>continuam</strong> como estão.
+              </p>
+              <p>Um backup do arquivo atual é salvo automaticamente antes de qualquer alteração.</p>
+              <label>
+                Novo exercício
+                <input type="number" value={novoAno} onChange={(e) => setNovoAno(e.target.value)} />
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={confirmado}
+                  onChange={(e) => setConfirmado(e.target.checked)}
+                  style={{ width: 'auto' }}
+                />
+                Entendi e quero limpar os valores lançados para começar {novoAno || 'o novo ano'}.
+              </label>
+              <div className="actions-row">
+                <button className="link-btn" onClick={() => setViradaAberta(false)} disabled={virando}>
+                  Cancelar
+                </button>
+                <button onClick={confirmarVirada} disabled={virando || !confirmado || !novoAno}>
+                  {virando ? 'Processando...' : 'Confirmar virada de exercício'}
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="card">
         <h3>Pasta para salvar os carnês (PDF)</h3>

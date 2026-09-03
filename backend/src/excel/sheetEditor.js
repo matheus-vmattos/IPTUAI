@@ -147,6 +147,23 @@ function setCellsInRow(rowXml, rowNum, updates) {
   return `${openTag}${cellsXml}</row>`;
 }
 
+// Limpa um conjunto de colunas de uma linha (usado na virada de exercicio):
+// mantem a celula com seu estilo/formatacao atual (se tiver) mas sem valor,
+// igual as celulas nunca preenchidas da planilha - ao contrario de
+// setCellsInRow com valor "", isso NAO apaga a formatacao da celula.
+function clearCellsInRow(rowXml, cols) {
+  const cells = parseCells(rowXml);
+  const colsSet = new Set(cols);
+  const partes = cells.map((cell) => {
+    if (!colsSet.has(cell.col)) return cell.raw;
+    const styleAttr = styleAttrOf(cell);
+    return `<c r="${cell.col}${cell.row}"${styleAttr}/>`;
+  });
+  const openTagMatch = rowXml.match(/^<row[^>]*>/);
+  const openTag = openTagMatch ? openTagMatch[0] : '<row>';
+  return `${openTag}${partes.join('')}</row>`;
+}
+
 module.exports = {
   parseSharedStrings,
   indexRows,
@@ -154,5 +171,6 @@ module.exports = {
   cellValue,
   buildDataCell,
   setCellsInRow,
+  clearCellsInRow,
   unescapeXml,
 };

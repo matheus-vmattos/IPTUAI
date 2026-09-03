@@ -109,6 +109,32 @@ ipcMain.handle('abrir-arquivo', async (event, caminho) => {
   if (erro) throw new Error(erro);
 });
 
+// Gera um PDF a partir de um HTML montado no renderer (relatorios como o
+// resumo do proprietario): renderiza numa janela oculta e imprime pra PDF,
+// depois deixa o usuario escolher onde salvar.
+ipcMain.handle('exportar-pdf', async (event, { html, nomeArquivoSugerido }) => {
+  const janelaImpressao = new BrowserWindow({ show: false });
+  try {
+    await janelaImpressao.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`);
+    const pdfBuffer = await janelaImpressao.webContents.printToPDF({
+      printBackground: true,
+      pageSize: 'A4',
+    });
+
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'Salvar PDF',
+      defaultPath: nomeArquivoSugerido || 'relatorio.pdf',
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    });
+    if (result.canceled || !result.filePath) return { salvo: false };
+
+    await fs.promises.writeFile(result.filePath, pdfBuffer);
+    return { salvo: true, caminho: result.filePath };
+  } finally {
+    janelaImpressao.close();
+  }
+});
+
 // --- Versao / auto-update ---------------------------------------------
 // checkForUpdatesAndNotify() (usado antes) baixa e notifica sozinho via
 // notificacao nativa do SO, sem dar controle nenhum pro app. Aqui o
