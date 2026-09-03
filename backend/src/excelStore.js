@@ -197,7 +197,14 @@ async function listImoveis(query) {
     if (fields.codigo === null && !fields.proprietario) continue;
 
     if (q) {
-      const haystack = [fields.codigo, fields.proprietario, fields.inscricaoIptu, fields.dati, fields.obs]
+      const haystack = [
+        fields.codigo,
+        fields.proprietario,
+        fields.nominalIptu,
+        fields.inscricaoIptu,
+        fields.dati,
+        fields.obs,
+      ]
         .filter((v) => v !== null && v !== undefined)
         .join(' ')
         .toLowerCase();
@@ -207,6 +214,7 @@ async function listImoveis(query) {
     out.push({
       codigo: fields.codigo,
       proprietario: fields.proprietario,
+      nominalIptu: fields.nominalIptu,
       inscricaoIptu: fields.inscricaoIptu,
       dati: fields.dati,
       obs: fields.obs,
@@ -348,6 +356,99 @@ async function marcarLancado({ codigo, tributo, status }) {
   });
 }
 
+async function listarProprietarios(query) {
+  const xlsxPath = await requireXlsxPath();
+  const zip = await loadZip(xlsxPath);
+  const sheetXml = await zip.file(SHEET_PATH).async('string');
+  const sharedStringsXml = await zip.file(SHARED_STRINGS_PATH).async('string');
+  const sharedStrings = parseSharedStrings(sharedStringsXml);
+  const { rows, maxRow } = indexRows(sheetXml);
+
+  const q = (query || '').trim().toLowerCase();
+  const contagem = new Map();
+  for (let r = 2; r <= maxRow; r++) {
+    const info = rows.get(r);
+    if (!info) continue;
+    const nome = fieldsOfRow(info.xml, sharedStrings).proprietario;
+    if (!nome) continue;
+    if (q && !nome.toLowerCase().includes(q)) continue;
+    contagem.set(nome, (contagem.get(nome) || 0) + 1);
+  }
+
+  return [...contagem.entries()]
+    .map(([proprietario, totalImoveis]) => ({ proprietario, totalImoveis }))
+    .sort((a, b) => a.proprietario.localeCompare(b.proprietario));
+}
+
+// Painel agregado por proprietario: quantos imoveis, quanto valor total (por
+// forma de pagamento), quem paga cada um, e quantos codigos "I" compartilham
+// a mesma inscricao (comum em imoveis de rateio).
+async function getResumoProprietario(nome) {
+  const xlsxPath = await requireXlsxPath();
+  const zip = await loadZip(xlsxPath);
+  const sheetXml = await zip.file(SHEET_PATH).async('string');
+  const sharedStringsXml = await zip.file(SHARED_STRINGS_PATH).async('string');
+  const sharedStrings = parseSharedStrings(sharedStringsXml);
+  const { rows, maxRow } = indexRows(sheetXml);
+  const { cellAt } = await loadListasRaw(zip);
+  const nParcelas = Number(cellAt(5, 'B')) || 12;
+
+  const alvo = String(nome).trim().toLowerCase();
+  const imoveis = [];
+  for (let r = 2; r <= maxRow; r++) {
+    const info = rows.get(r);
+    if (!info) continue;
+    const fields = fieldsOfRow(info.xml, sharedStrings);
+    if (!fields.proprietario || fields.proprietario.trim().toLowerCase() !== alvo) continue;
+    imoveis.push(fields);
+  }
+  if (imoveis.length === 0) return null;
+
+  let valorCotaUnicaTotal = 0;
+  let valorParceladoTotal = 0;
+  const quemPagaIptu = {};
+  const quemPagaDati = {};
+  const inscricaoCodigos = new Map();
+
+  for (const im of imoveis) {
+    valorCotaUnicaTotal += (Number(im.iptuCotaUnica) || 0) + (Number(im.datiCotaUnica) || 0);
+
+    const iptuTotal = calcTotal(im.iptuParcela, im.iptuUltimaParcela, nParcelas);
+    const datiTotal = calcTotal(im.datiParcela, im.datiUltimaParcela, nParcelas);
+    valorParceladoTotal += (iptuTotal || 0) + (datiTotal || 0);
+
+    if (im.quemPagaIptu) quemPagaIptu[im.quemPagaIptu] = (quemPagaIptu[im.quemPagaIptu] || 0) + 1;
+    if (im.quemPagaDati) quemPagaDati[im.quemPagaDati] = (quemPagaDati[im.quemPagaDati] || 0) + 1;
+
+    if (im.inscricaoIptu) {
+      const lista = inscricaoCodigos.get(im.inscricaoIptu) || [];
+      lista.push(im.codigo);
+      inscricaoCodigos.set(im.inscricaoIptu, lista);
+    }
+  }
+
+  return {
+    proprietario: imoveis[0].proprietario,
+    totalImoveis: imoveis.length,
+    imoveis: imoveis.map((im) => ({
+      codigo: im.codigo,
+      nominalIptu: im.nominalIptu,
+      inscricaoIptu: im.inscricaoIptu,
+      dati: im.dati,
+      formaPgto: im.formaPgto,
+    })),
+    valorCotaUnicaTotal: Math.round(valorCotaUnicaTotal * 100) / 100,
+    valorParceladoTotal: Math.round(valorParceladoTotal * 100) / 100,
+    quemPagaIptu,
+    quemPagaDati,
+    inscricoes: [...inscricaoCodigos.entries()].map(([inscricaoIptu, codigos]) => ({
+      inscricaoIptu,
+      qtdCodigos: codigos.length,
+      codigos,
+    })),
+  };
+}
+
 module.exports = {
   readConfig,
   writeConfig,
@@ -356,4 +457,6 @@ module.exports = {
   getImovel,
   lancarTributo,
   marcarLancado,
+  listarProprietarios,
+  getResumoProprietario,
 };

@@ -4,6 +4,7 @@ const fs = require('fs/promises');
 const path = require('path');
 const excelStore = require('../excelStore');
 const { extrairParcelas, resumirParcelas } = require('../pdfParser');
+const { extrairCodigoDoNome } = require('../filenameCodigo');
 const asyncHandler = require('../asyncHandler');
 
 const upload = multer({
@@ -31,7 +32,21 @@ router.post(
     try {
       const { parceladas, cotaUnica } = await extrairParcelas(req.file.buffer);
       const resumoParcelas = resumirParcelas(parceladas);
-      res.json({ nomeOriginal: req.file.originalname, parceladas, cotaUnica, resumoParcelas });
+
+      const codigoSugerido = extrairCodigoDoNome(req.file.originalname);
+      let imovelSugerido = null;
+      if (codigoSugerido) {
+        imovelSugerido = await excelStore.getImovel(codigoSugerido).catch(() => null);
+      }
+
+      res.json({
+        nomeOriginal: req.file.originalname,
+        parceladas,
+        cotaUnica,
+        resumoParcelas,
+        codigoSugerido,
+        imovelSugerido,
+      });
     } catch (err) {
       res.status(422).json({ error: 'Não foi possível ler o PDF', detalhe: err.message });
     }

@@ -100,6 +100,9 @@ export default function Consulta() {
       {imovel && (
         <div className="resultado">
           <h3>Imóvel I {imovel.codigo} — {imovel.proprietario}</h3>
+          {imovel.nominalIptu && (
+            <p className="meta">Nome no carnê: {imovel.nominalIptu}</p>
+          )}
 
           <div className="card">
             <h4>IPTU</h4>

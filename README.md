@@ -46,22 +46,33 @@ Na primeira vez, abra **Configurações** dentro do app e:
 
 ## Fluxo de uso
 
-1. **Lançar**: envie o PDF do carnê. O sistema tenta extrair
-   automaticamente o valor da cota única (ou das parcelas, identificando
-   o valor recorrente e o valor da última parcela quando diferente) —
-   revise antes de confirmar.
+1. **Lançar**: envie um ou vários PDFs de carnê de uma vez. Para cada um,
+   o sistema tenta extrair automaticamente o valor da cota única (ou das
+   parcelas, identificando o valor recorrente e o valor da última parcela
+   quando diferente) e também tenta identificar o **código do imóvel pelo
+   nome do arquivo** (ex: `I213.pdf`, `213 - Rua tal.pdf`) — sempre uma
+   sugestão, revise antes de confirmar.
 2. Diga se o carnê é de **IPTU ou DATI**, se é **cota única ou
    parcelado**, e o **código de identificação do imóvel** (coluna `I` da
    planilha, ex: `213`). Se o código já existir, os dados são gravados na
-   linha existente; se não existir, uma linha nova é criada.
+   linha existente; se não existir, uma linha nova é criada. Se o nome
+   impresso no carnê for diferente do proprietário (ex: guia em nome de
+   terceiro), informe em **"Nome no carnê"** — os dois ficam guardados
+   separadamente na planilha.
 3. Escolha **quem paga** (lista vem da própria planilha, aba "Listas").
 4. Confirme — os valores, o proprietário/inscrição e o link do PDF salvo
    são gravados na linha do imóvel, e a coluna "salvo" desse tributo é
-   marcada como "Feito".
+   marcada como "Feito". Com vários PDFs, o app passa pro próximo da fila
+   sozinho e mostra um resumo no final.
 5. **Consultar**: busque por código, inscrição ou proprietário para ver
    os valores atuais (cota única, parcela, total calculado, valor a
    pagar), marcar o tributo como lançado no sistema contábil da empresa,
    e abrir o PDF do carnê salvo.
+6. **Proprietários**: painel com o resumo de todos os imóveis de um
+   proprietário — quantos IPTUs, valor total (cota única e parcelado),
+   quantos cada forma de pagamento ("Valoriza paga", repassado etc.) e
+   quantos códigos `I` compartilham a mesma inscrição (útil pra achar
+   imóveis de rateio, onde uma inscrição é dividida em várias linhas).
 
 ## Extração automática de valores
 

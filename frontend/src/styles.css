@@ -207,6 +207,10 @@ button:disabled {
   background: #4f8df5;
 }
 
+.table-scroll {
+  overflow-x: auto;
+}
+
 .parcelas-table {
   width: 100%;
   border-collapse: collapse;
