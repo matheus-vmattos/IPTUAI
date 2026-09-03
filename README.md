@@ -82,6 +82,20 @@ final.
 
 ## Build do app desktop (com auto-update)
 
+**Automático (recomendado):** o workflow `.github/workflows/build-windows.yml`
+builda o instalador num runner Windows real (não precisa de Wine) e publica
+como GitHub Release a cada push que toque `frontend/**`. Basta:
+
+1. Subir a versão em `frontend/package.json` (`"version"`) — **obrigatório em
+   todo release**: o `electron-builder` se recusa a reaproveitar um release já
+   existente há mais de 2h com a mesma versão (ele conclui o workflow como
+   sucesso mesmo assim, mas pula a publicação silenciosamente).
+2. Commitar e dar push. O Release novo (com o instalador e o `latest.yml` que
+   alimenta o auto-update) aparece em alguns minutos em
+   https://github.com/matheus-vmattos/IPTUAI/releases.
+
+**Manual (build local):**
+
 ```bash
 cd backend && npm install   # o build empacota o backend inteiro (com node_modules) dentro do app
 cd ../frontend
@@ -89,15 +103,16 @@ npm run build       # gera o instalador em frontend/release/, sem publicar
 npm run release      # gera e publica o instalador como GitHub Release
 ```
 
-O `package.json` do frontend já está configurado para publicar releases no
-repositório `matheus-vmattos/iptuai`. Para `npm run release` funcionar você
-precisa de um token do GitHub com permissão de escrita em Releases, exportado
-como `GH_TOKEN` no ambiente (veja a documentação do
-[electron-builder](https://www.electron.build/configuration/publish)).
+Para `npm run release` funcionar localmente você precisa de um token do
+GitHub com permissão de escrita em Releases, exportado como `GH_TOKEN` no
+ambiente (veja a documentação do
+[electron-builder](https://www.electron.build/configuration/publish)). Builds
+Windows a partir de Linux/Mac exigem Wine instalado.
 
-Depois de publicado, os apps já instalados verificam e baixam atualizações
-automaticamente ao abrir (via `electron-updater`), então para atualizar o app
-de todo mundo basta gerar uma nova versão e publicar um novo Release.
+Depois de publicado, os apps já instalados verificam e baixam a atualização
+automaticamente ao abrir (via `electron-updater`) e a aplicam no próximo
+reinício — então para atualizar o app de todo mundo basta subir a versão e
+publicar um novo Release.
 
 > Nota: instaladores do Windows não assinados digitalmente mostram um aviso
 > do SmartScreen na primeira execução. Isso é esperado sem um certificado de
