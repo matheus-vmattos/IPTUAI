@@ -141,9 +141,15 @@ export default function Upload() {
 
     base.reajustePct = String(config?.reajustePadrao ?? 5);
 
-    const codigoSugerido = entrada.extracao.codigoSugerido;
-    if (codigoSugerido) {
-      base = await prefillPorCodigo(codigoSugerido, base);
+    // A inscricao lida de dentro do PDF e mais confiavel que o codigo tirado
+    // do nome do arquivo - só usa o nome do arquivo se a inscrição não bateu
+    // com nada (ou bateu com mais de uma linha, tipo imóvel de rateio, caso
+    // em que quem escolhe é o usuário no passo seguinte).
+    const porInscricao = entrada.extracao.imoveisPorInscricao || [];
+    if (porInscricao.length === 1) {
+      base = await prefillPorCodigo(String(porInscricao[0].codigo), base);
+    } else if (porInscricao.length === 0 && entrada.extracao.codigoSugerido) {
+      base = await prefillPorCodigo(entrada.extracao.codigoSugerido, base);
     }
     setItem(base);
     setIndice(idx);
@@ -486,6 +492,33 @@ export default function Upload() {
       {step === 3 && (
         <div className="card">
           <h3>Código de identificação do imóvel</h3>
+
+          {(() => {
+            const { inscricaoDetectada, imoveisPorInscricao } = fila[indice]?.extracao || {};
+            if (!inscricaoDetectada || (imoveisPorInscricao || []).length < 2) return null;
+            return (
+              <div className="card destaque">
+                <p className="meta">
+                  A inscrição <strong>{inscricaoDetectada}</strong> lida do carnê aparece em{' '}
+                  {imoveisPorInscricao.length} linhas da planilha (imóvel de rateio) — escolha qual:
+                </p>
+                <ul className="resumo-list">
+                  {imoveisPorInscricao.map((op) => (
+                    <li key={op.codigo}>
+                      <button
+                        className="link-btn"
+                        onClick={() => buscarImovelManual(String(op.codigo))}
+                      >
+                        I {op.codigo} — {op.nominalIptu || op.proprietario}
+                        {op.obs ? ` (${op.obs})` : ''}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })()}
+
           <label>
             Código (coluna "I" da planilha)
             <input
@@ -498,7 +531,13 @@ export default function Upload() {
           {buscandoImovel && <p className="meta">Buscando na planilha...</p>}
 
           {item.imovelEncontrado && (
-            <div className="success">Imóvel encontrado: {item.imovelEncontrado.proprietario}</div>
+            <div className="success">
+              Imóvel encontrado: {item.imovelEncontrado.proprietario}
+              {(fila[indice]?.extracao?.imoveisPorInscricao || []).length === 1 &&
+                String(fila[indice].extracao.imoveisPorInscricao[0].codigo) === String(item.codigo) && (
+                  <> (identificado pela inscrição do carnê)</>
+                )}
+            </div>
           )}
           {item.imovelNovo && (
             <div className="meta">Código não encontrado na planilha — será criada uma linha nova.</div>

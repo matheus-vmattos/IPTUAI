@@ -231,13 +231,84 @@ async function listImoveis(query) {
   return out;
 }
 
+// Imovel de rateio: varias linhas da planilha (mesma inscricao na
+// prefeitura - IPTU e/ou DATI) representando unidades diferentes de um
+// mesmo terreno/lote, cada uma com sua guia e seu valor, mas cujo total
+// precisa ser consolidado pra lancar de uma vez no sistema contabil da
+// empresa. Agrupa pela INSCRICAO (nao pela coluna "Imovel de rateio" (X) -
+// esse campo e so uma anotacao livre que o usuario preenche as vezes, nem
+// sempre em todas as linhas do grupo - ex: unidades vazias no momento nao
+// tem X preenchido, mas ainda fazem parte do mesmo rateio; e o valor de X
+// e so um rotulo arbitrario, pode ate coincidir com o codigo "I" de um
+// imovel completamente diferente, entao NUNCA e resolvido contra a coluna
+// A/codigo). X, quando presente em algum membro, e mostrado a parte como o
+// "rotulo usado no sistema contabil" - so texto informativo.
+async function calcularGrupoRateio(fields, rows, maxRow, sharedStrings, nParcelas) {
+  const porCodigo = new Map();
+
+  function coletarPorInscricao(campo) {
+    const alvo = normalizarInscricao(fields[campo]);
+    if (!alvo) return;
+    for (let r = 2; r <= maxRow; r++) {
+      const info = rows.get(r);
+      if (!info) continue;
+      const f = fieldsOfRow(info.xml, sharedStrings);
+      if (normalizarInscricao(f[campo]) !== alvo) continue;
+      if (!porCodigo.has(f.codigo)) porCodigo.set(f.codigo, f);
+    }
+  }
+  coletarPorInscricao('inscricaoIptu');
+  coletarPorInscricao('dati');
+
+  if (porCodigo.size < 2) return null;
+
+  const membros = [...porCodigo.values()].map((f) => ({
+    codigo: f.codigo,
+    proprietario: f.proprietario,
+    nominalIptu: f.nominalIptu,
+    inscricaoIptu: f.inscricaoIptu,
+    dati: f.dati,
+    imovelDeRateio: f.imovelDeRateio,
+    formaPgto: f.formaPgto,
+    obs: f.obs,
+    iptuCotaUnica: f.iptuCotaUnica,
+    iptuParcela: f.iptuParcela,
+    iptuUltimaParcela: f.iptuUltimaParcela,
+    iptuTotalCalculado: calcTotal(f.iptuParcela, f.iptuUltimaParcela, nParcelas),
+    datiCotaUnica: f.datiCotaUnica,
+    datiParcela: f.datiParcela,
+    datiUltimaParcela: f.datiUltimaParcela,
+    datiTotalCalculado: calcTotal(f.datiParcela, f.datiUltimaParcela, nParcelas),
+  }));
+  membros.sort((a, b) => Number(a.codigo) - Number(b.codigo));
+
+  const somar = (campo) => {
+    const soma = membros.reduce((acc, m) => acc + (Number(m[campo]) || 0), 0);
+    return soma || null;
+  };
+
+  const rotuloContabil = membros.map((m) => m.imovelDeRateio).find((v) => v !== null && v !== undefined && String(v).trim() !== '');
+
+  return {
+    rotuloContabil: rotuloContabil ?? null,
+    totalImoveis: membros.length,
+    imoveis: membros,
+    totais: {
+      iptuCotaUnica: somar('iptuCotaUnica'),
+      iptuParcelado: somar('iptuTotalCalculado'),
+      datiCotaUnica: somar('datiCotaUnica'),
+      datiParcelado: somar('datiTotalCalculado'),
+    },
+  };
+}
+
 async function getImovel(codigo) {
   const xlsxPath = await requireXlsxPath();
   const zip = await loadZip(xlsxPath);
   const sheetXml = await zip.file(SHEET_PATH).async('string');
   const sharedStringsXml = await zip.file(SHARED_STRINGS_PATH).async('string');
   const sharedStrings = parseSharedStrings(sharedStringsXml);
-  const { rows } = indexRows(sheetXml);
+  const { rows, maxRow } = indexRows(sheetXml);
 
   const rowNum = findRowByCodigo(rows, sharedStrings, codigo);
   if (!rowNum) return null;
@@ -256,7 +327,52 @@ async function getImovel(codigo) {
     valorAPagarCalculado = (iptuTotalCalculado || 0) + (datiTotalCalculado || 0);
   }
 
-  return { ...fields, iptuTotalCalculado, datiTotalCalculado, valorAPagarCalculado };
+  const grupoRateio = await calcularGrupoRateio(fields, rows, maxRow, sharedStrings, nParcelas);
+
+  return { ...fields, iptuTotalCalculado, datiTotalCalculado, valorAPagarCalculado, grupoRateio };
+}
+
+// Busca por igualdade exata (normalizada) de inscricao, em IPTU (coluna D)
+// ou DATI (coluna E). Usada pra sugerir o imovel certo a partir da
+// inscricao lida do PDF - mais confiavel que o codigo tirado do nome do
+// arquivo, que costuma ser so um numero de referencia do CRM do usuario e
+// pode nao bater com o codigo "I" real da linha (ex: imoveis de rateio).
+function normalizarInscricao(v) {
+  return String(v ?? '').trim().toLowerCase();
+}
+
+async function buscarPorInscricao(inscricao) {
+  const alvo = normalizarInscricao(inscricao);
+  if (!alvo) return [];
+
+  const xlsxPath = await requireXlsxPath();
+  const zip = await loadZip(xlsxPath);
+  const sheetXml = await zip.file(SHEET_PATH).async('string');
+  const sharedStringsXml = await zip.file(SHARED_STRINGS_PATH).async('string');
+  const sharedStrings = parseSharedStrings(sharedStringsXml);
+  const { rows, maxRow } = indexRows(sheetXml);
+
+  const out = [];
+  for (let r = 2; r <= maxRow; r++) {
+    const info = rows.get(r);
+    if (!info) continue;
+    const fields = fieldsOfRow(info.xml, sharedStrings);
+    const bateuIptu = normalizarInscricao(fields.inscricaoIptu) === alvo;
+    const bateuDati = normalizarInscricao(fields.dati) === alvo;
+    if (!bateuIptu && !bateuDati) continue;
+
+    out.push({
+      codigo: fields.codigo,
+      proprietario: fields.proprietario,
+      nominalIptu: fields.nominalIptu,
+      inscricaoIptu: fields.inscricaoIptu,
+      dati: fields.dati,
+      imovelDeRateio: fields.imovelDeRateio,
+      obs: fields.obs,
+      tributoQueBateu: bateuIptu && bateuDati ? 'IPTU/DATI' : bateuIptu ? 'IPTU' : 'DATI',
+    });
+  }
+  return out;
 }
 
 function novoGuid() {
@@ -766,6 +882,7 @@ module.exports = {
   getListas,
   listImoveis,
   getImovel,
+  buscarPorInscricao,
   lancarTributo,
   marcarLancado,
   atualizarImovel,

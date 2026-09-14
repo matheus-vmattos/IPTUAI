@@ -252,6 +252,49 @@ export default function Consulta() {
             </ul>
             {imovel.linkCarne && <button onClick={abrirCarne}>Abrir carnê salvo</button>}
           </div>
+
+          {imovel.grupoRateio && (
+            <div className="card destaque">
+              <h4>Imóvel de rateio ({imovel.grupoRateio.totalImoveis} linhas, mesma inscrição)</h4>
+              <p className="meta">
+                Este imóvel faz parte de um rateio (mesma inscrição em {imovel.grupoRateio.totalImoveis} linhas
+                da planilha).{' '}
+                {imovel.grupoRateio.rotuloContabil && (
+                  <>
+                    Rótulo usado no sistema contábil: <strong>{imovel.grupoRateio.rotuloContabil}</strong>.{' '}
+                  </>
+                )}
+                Valor consolidado pra lançar de uma vez:
+              </p>
+              <ul className="resumo-list">
+                {imovel.grupoRateio.totais.iptuCotaUnica != null && (
+                  <li>IPTU cota única (total): <strong>{formatarMoeda(imovel.grupoRateio.totais.iptuCotaUnica)}</strong></li>
+                )}
+                {imovel.grupoRateio.totais.iptuParcelado != null && (
+                  <li>IPTU parcelado (total): <strong>{formatarMoeda(imovel.grupoRateio.totais.iptuParcelado)}</strong></li>
+                )}
+                {imovel.grupoRateio.totais.datiCotaUnica != null && (
+                  <li>DATI cota única (total): <strong>{formatarMoeda(imovel.grupoRateio.totais.datiCotaUnica)}</strong></li>
+                )}
+                {imovel.grupoRateio.totais.datiParcelado != null && (
+                  <li>DATI parcelado (total): <strong>{formatarMoeda(imovel.grupoRateio.totais.datiParcelado)}</strong></li>
+                )}
+              </ul>
+              <p className="meta">Linhas do grupo (valor de cada unidade):</p>
+              <ul className="resumo-list">
+                {imovel.grupoRateio.imoveis.map((m) => (
+                  <li key={m.codigo}>
+                    I {m.codigo} — {m.nominalIptu || m.proprietario}
+                    {': '}
+                    {m.formaPgto === 'Cota única'
+                      ? formatarMoeda((Number(m.iptuCotaUnica) || 0) + (Number(m.datiCotaUnica) || 0))
+                      : formatarMoeda((Number(m.iptuTotalCalculado) || 0) + (Number(m.datiTotalCalculado) || 0))}
+                    {m.codigo === imovel.codigo && ' (este)'}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 

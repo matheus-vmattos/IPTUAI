@@ -93,11 +93,42 @@ function extrairCandidatas(flat) {
   });
 }
 
+// Numero de inscricao do imovel na prefeitura. O extrator de texto nao
+// preserva a ligacao entre o rotulo ("Inscricao PMS:") e o valor (mesmo
+// problema de layout que afeta os valores monetarios - ver comentario
+// acima), entao em vez de procurar pelo rotulo, conta a frequencia de
+// todo token no formato de inscricao (4 a 7 digitos, traco, 1 ou 2
+// digitos) - o carne costuma repetir o numero da inscricao em cada guia
+// (cota unica x3, parcela x10 etc.), entao o mais frequente e o correto
+// (confirmado empiricamente: o real aparece dezenas de vezes contra no
+// maximo 1-2 de qualquer outro codigo parecido, tipo digito verificador).
+const INSCRICAO_RE = /\b(\d{4,7}-\d{1,2})\b/g;
+const INSCRICAO_MIN_OCORRENCIAS = 2;
+
+function extrairInscricaoCandidata(flat) {
+  const contagem = new Map();
+  let m;
+  const re = new RegExp(INSCRICAO_RE.source, INSCRICAO_RE.flags);
+  while ((m = re.exec(flat))) {
+    contagem.set(m[1], (contagem.get(m[1]) || 0) + 1);
+  }
+  let melhor = null;
+  let maiorContagem = 0;
+  for (const [valor, count] of contagem) {
+    if (count > maiorContagem) {
+      maiorContagem = count;
+      melhor = valor;
+    }
+  }
+  return maiorContagem >= INSCRICAO_MIN_OCORRENCIAS ? melhor : null;
+}
+
 async function extrairParcelas(buffer) {
   const data = await pdfParse(buffer);
   const flat = data.text.replace(/\s+/g, ' ').trim();
 
   const candidatas = extrairCandidatas(flat);
+  const inscricaoDetectada = extrairInscricaoCandidata(flat);
 
   // Parcelado: numera sequencialmente pela ordem de vencimento, ja que o
   // numero da parcela impresso no PDF nem sempre e recuperavel de forma
@@ -118,6 +149,7 @@ async function extrairParcelas(buffer) {
     textoBruto: data.text,
     parceladas,
     cotaUnica,
+    inscricaoDetectada,
   };
 }
 

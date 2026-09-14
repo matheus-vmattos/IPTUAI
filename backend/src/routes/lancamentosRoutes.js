@@ -30,13 +30,22 @@ router.post(
     if (!req.file) return res.status(400).json({ error: 'Envie um arquivo PDF' });
 
     try {
-      const { parceladas, cotaUnica } = await extrairParcelas(req.file.buffer);
+      const { parceladas, cotaUnica, inscricaoDetectada } = await extrairParcelas(req.file.buffer);
       const resumoParcelas = resumirParcelas(parceladas);
 
       const codigoSugerido = extrairCodigoDoNome(req.file.originalname);
       let imovelSugerido = null;
       if (codigoSugerido) {
         imovelSugerido = await excelStore.getImovel(codigoSugerido).catch(() => null);
+      }
+
+      // A inscricao lida de dentro do PDF e mais confiavel que o codigo
+      // tirado do nome do arquivo (que costuma ser so uma referencia do CRM
+      // do usuario, e pode nao bater com o codigo "I" real - ex: imoveis de
+      // rateio, onde uma inscricao se espalha por varias linhas).
+      let imoveisPorInscricao = [];
+      if (inscricaoDetectada) {
+        imoveisPorInscricao = await excelStore.buscarPorInscricao(inscricaoDetectada).catch(() => []);
       }
 
       res.json({
@@ -46,6 +55,8 @@ router.post(
         resumoParcelas,
         codigoSugerido,
         imovelSugerido,
+        inscricaoDetectada,
+        imoveisPorInscricao,
       });
     } catch (err) {
       res.status(422).json({ error: 'Não foi possível ler o PDF', detalhe: err.message });
