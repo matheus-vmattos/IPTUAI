@@ -68,7 +68,7 @@ export default function Consulta() {
     try {
       const { data } = await api.get('/imoveis', { params: { q: busca.trim() } });
       setResultados(data);
-      if (data.length === 1) abrirImovel(data[0].codigo);
+      if (data.length === 1) abrirImovel(data[0].codigo, data[0].inscricaoIptu || data[0].dati);
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {
@@ -76,12 +76,18 @@ export default function Consulta() {
     }
   }
 
-  async function abrirImovel(codigo) {
+  // inscricao desambigua qual linha, quando o codigo aparece em mais de uma
+  // (ex: um "I" com mais de uma guia de IPTU) - os resultados da busca já
+  // trazem a inscrição de cada linha especificamente, então normalmente já
+  // sobra sem ambiguidade.
+  async function abrirImovel(codigo, inscricao) {
     setError('');
     setLoading(true);
     setEditando(false);
     try {
-      const { data } = await api.get(`/imoveis/${encodeURIComponent(codigo)}`);
+      const { data } = await api.get(`/imoveis/${encodeURIComponent(codigo)}`, {
+        params: inscricao ? { inscricao } : undefined,
+      });
       setImovel(data);
     } catch (err) {
       setError(apiErrorMessage(err));
@@ -96,8 +102,9 @@ export default function Consulta() {
       await api.patch(`/imoveis/${encodeURIComponent(imovel.codigo)}/lancado`, {
         tributo,
         status: 'Feito',
+        inscricao: imovel.inscricaoIptu || imovel.dati,
       });
-      abrirImovel(imovel.codigo);
+      abrirImovel(imovel.codigo, imovel.inscricaoIptu || imovel.dati);
     } catch (err) {
       setError(apiErrorMessage(err));
     }
@@ -126,9 +133,12 @@ export default function Consulta() {
     setError('');
     setSalvando(true);
     try {
-      await api.patch(`/imoveis/${encodeURIComponent(imovel.codigo)}`, form);
+      const inscricaoOriginal = imovel.inscricaoIptu || imovel.dati;
+      await api.patch(`/imoveis/${encodeURIComponent(imovel.codigo)}`, form, {
+        params: inscricaoOriginal ? { inscricao: inscricaoOriginal } : undefined,
+      });
       setEditando(false);
-      await abrirImovel(imovel.codigo);
+      await abrirImovel(imovel.codigo, form.inscricaoIptu || form.dati || inscricaoOriginal);
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {
@@ -157,9 +167,12 @@ export default function Consulta() {
         <div className="card">
           <h4>{resultados.length} resultado(s)</h4>
           <ul className="resumo-list">
-            {resultados.map((r) => (
-              <li key={r.codigo}>
-                <button className="choice-item" onClick={() => abrirImovel(r.codigo)}>
+            {resultados.map((r, i) => (
+              <li key={`${r.codigo}-${r.inscricaoIptu || r.dati || i}`}>
+                <button
+                  className="choice-item"
+                  onClick={() => abrirImovel(r.codigo, r.inscricaoIptu || r.dati)}
+                >
                   <strong>I {r.codigo}</strong> — {r.proprietario} ({r.inscricaoIptu || 'sem inscrição'})
                 </button>
               </li>

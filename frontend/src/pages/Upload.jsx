@@ -23,6 +23,7 @@ function itemVazio() {
     codigo: '',
     imovelEncontrado: null,
     imovelNovo: false,
+    candidatosAmbiguos: null,
     proprietario: '',
     nominalIptu: '',
     inscricaoIptu: '',
@@ -69,15 +70,22 @@ export default function Upload() {
     setItem((prev) => ({ ...prev, ...campos }));
   }
 
-  async function prefillPorCodigo(codigo, itemAtual) {
+  // inscricao desambigua qual linha, quando o codigo bater em mais de uma
+  // (ex: um "I" com mais de uma inscricao/guia de IPTU). Sem ela, se o
+  // codigo for ambiguo o backend devolve 409 com os candidatos - guardamos
+  // pra mostrar um seletor no passo 3, em vez de simplesmente falhar.
+  async function prefillPorCodigo(codigo, itemAtual, inscricao) {
     if (!codigo) return itemAtual;
     try {
-      const { data } = await api.get(`/imoveis/${encodeURIComponent(codigo)}`);
+      const { data } = await api.get(`/imoveis/${encodeURIComponent(codigo)}`, {
+        params: inscricao ? { inscricao } : undefined,
+      });
       return {
         ...itemAtual,
         codigo,
         imovelEncontrado: data,
         imovelNovo: false,
+        candidatosAmbiguos: null,
         proprietario: data.proprietario || '',
         nominalIptu: data.nominalIptu || '',
         inscricaoIptu: data.inscricaoIptu || '',
@@ -85,7 +93,16 @@ export default function Upload() {
       };
     } catch (err) {
       if (err?.response?.status === 404) {
-        return { ...itemAtual, codigo, imovelEncontrado: null, imovelNovo: true };
+        return { ...itemAtual, codigo, imovelEncontrado: null, imovelNovo: true, candidatosAmbiguos: null };
+      }
+      if (err?.response?.status === 409) {
+        return {
+          ...itemAtual,
+          codigo,
+          imovelEncontrado: null,
+          imovelNovo: false,
+          candidatosAmbiguos: err.response.data?.candidatos || [],
+        };
       }
       return itemAtual;
     }
@@ -147,7 +164,8 @@ export default function Upload() {
     // em que quem escolhe é o usuário no passo seguinte).
     const porInscricao = entrada.extracao.imoveisPorInscricao || [];
     if (porInscricao.length === 1) {
-      base = await prefillPorCodigo(String(porInscricao[0].codigo), base);
+      const achado = porInscricao[0];
+      base = await prefillPorCodigo(String(achado.codigo), base, achado.inscricaoIptu || achado.dati);
     } else if (porInscricao.length === 0 && entrada.extracao.codigoSugerido) {
       base = await prefillPorCodigo(entrada.extracao.codigoSugerido, base);
     }
@@ -194,6 +212,16 @@ export default function Upload() {
     if (!codigo.trim()) return;
     setBuscandoImovel(true);
     const atualizado = await prefillPorCodigo(codigo.trim(), item);
+    setItem(atualizado);
+    setBuscandoImovel(false);
+  }
+
+  // Usado pelos seletores (grupo de rateio detectado pela inscrição do
+  // carnê, ou candidatos de um código ambíguo) - já manda a inscrição certa
+  // junto, pra não cair de novo em ambiguidade.
+  async function escolherImovel(codigo, inscricao) {
+    setBuscandoImovel(true);
+    const atualizado = await prefillPorCodigo(String(codigo), item, inscricao);
     setItem(atualizado);
     setBuscandoImovel(false);
   }
@@ -507,7 +535,7 @@ export default function Upload() {
                     <li key={op.codigo}>
                       <button
                         className="link-btn"
-                        onClick={() => buscarImovelManual(String(op.codigo))}
+                        onClick={() => escolherImovel(op.codigo, op.inscricaoIptu || op.dati)}
                       >
                         I {op.codigo} — {op.nominalIptu || op.proprietario}
                         {op.obs ? ` (${op.obs})` : ''}
@@ -519,11 +547,35 @@ export default function Upload() {
             );
           })()}
 
+          {(item.candidatosAmbiguos || []).length > 0 && (
+            <div className="card destaque">
+              <p className="meta">
+                O código <strong>I {item.codigo}</strong> existe em mais de uma linha da planilha — escolha qual:
+              </p>
+              <ul className="resumo-list">
+                {item.candidatosAmbiguos.map((c, i) => (
+                  <li key={`${c.codigo}-${c.inscricaoIptu || c.dati || i}`}>
+                    <button
+                      className="link-btn"
+                      onClick={() => escolherImovel(c.codigo, c.inscricaoIptu || c.dati)}
+                    >
+                      I {c.codigo} — {c.nominalIptu || c.proprietario} — inscrição{' '}
+                      {c.inscricaoIptu || c.dati || 'sem inscrição'}
+                      {c.obs ? ` (${c.obs})` : ''}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <label>
             Código (coluna "I" da planilha)
             <input
               value={item.codigo}
-              onChange={(e) => atualizarItem({ codigo: e.target.value, imovelEncontrado: null, imovelNovo: false })}
+              onChange={(e) =>
+                atualizarItem({ codigo: e.target.value, imovelEncontrado: null, imovelNovo: false, candidatosAmbiguos: null })
+              }
               onBlur={(e) => buscarImovelManual(e.target.value)}
               placeholder="ex: 213"
             />

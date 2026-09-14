@@ -89,17 +89,61 @@ function fieldsOfRow(rowXml, sharedStrings) {
   return out;
 }
 
-function findRowByCodigo(rows, sharedStrings, codigo) {
+function linhasComCodigo(rows, sharedStrings, codigo) {
   const target = String(codigo).trim();
-  if (!target) return null;
+  if (!target) return [];
+  const out = [];
   for (const [rowNum, info] of rows) {
     const cells = parseCells(info.xml);
     const aCell = cells.find((c) => c.col === 'A');
     if (!aCell) continue;
     const val = cellValue(aCell, sharedStrings);
-    if (val !== null && String(val).trim() === target) return rowNum;
+    if (val !== null && String(val).trim() === target) out.push(rowNum);
   }
-  return null;
+  return out;
+}
+
+// O codigo "I" (coluna A) normalmente identifica uma linha so, mas a
+// planilha real tem casos legitimos de um mesmo codigo em varias linhas -
+// ex: um imovel que corresponde a mais de uma inscricao/guia de IPTU na
+// prefeitura. Nesses casos, a inscricao (IPTU ou DATI) desambigua qual
+// linha e a certa; sem ela (ou se nao bater com nenhuma das linhas
+// candidatas), a ambiguidade e devolvida pro chamador decidir - NUNCA
+// silenciosamente pega "a primeira que achar", que e o jeito de acabar
+// lendo/editando/lancando na linha errada.
+function localizarLinha(rows, sharedStrings, codigo, inscricao) {
+  const linhas = linhasComCodigo(rows, sharedStrings, codigo);
+  if (linhas.length === 0) return { rowNum: null, ambiguo: false, candidatos: [] };
+  if (linhas.length === 1) return { rowNum: linhas[0], ambiguo: false, candidatos: [] };
+
+  if (inscricao) {
+    const alvo = normalizarInscricao(inscricao);
+    const bateram = linhas.filter((r) => {
+      const f = fieldsOfRow(rows.get(r).xml, sharedStrings);
+      return normalizarInscricao(f.inscricaoIptu) === alvo || normalizarInscricao(f.dati) === alvo;
+    });
+    if (bateram.length === 1) return { rowNum: bateram[0], ambiguo: false, candidatos: [] };
+  }
+
+  const candidatos = linhas.map((r) => fieldsOfRow(rows.get(r).xml, sharedStrings));
+  return { rowNum: null, ambiguo: true, candidatos };
+}
+
+// Mesma coisa que localizarLinha, mas lanca um erro (status 409 + lista de
+// candidatos) em vez de devolver a ambiguidade - conveniente pras rotas de
+// escrita, que nao podem simplesmente seguir em frente sem saber a linha
+// certa.
+function localizarLinhaOuFalhar(rows, sharedStrings, codigo, inscricao) {
+  const { rowNum, ambiguo, candidatos } = localizarLinha(rows, sharedStrings, codigo, inscricao);
+  if (ambiguo) {
+    const erro = new Error(
+      `O código "${codigo}" existe em ${candidatos.length} linhas diferentes da planilha - informe a inscrição (IPTU ou DATI) pra saber qual.`
+    );
+    erro.status = 409;
+    erro.candidatos = candidatos;
+    throw erro;
+  }
+  return rowNum;
 }
 
 function mapFieldsToColumns(dataUpdates) {
@@ -231,55 +275,44 @@ async function listImoveis(query) {
   return out;
 }
 
-// Imovel de rateio: varias linhas da planilha (mesma inscricao na
-// prefeitura - IPTU e/ou DATI) representando unidades diferentes de um
-// mesmo terreno/lote, cada uma com sua guia e seu valor, mas cujo total
-// precisa ser consolidado pra lancar de uma vez no sistema contabil da
-// empresa. Agrupa pela INSCRICAO (nao pela coluna "Imovel de rateio" (X) -
-// esse campo e so uma anotacao livre que o usuario preenche as vezes, nem
-// sempre em todas as linhas do grupo - ex: unidades vazias no momento nao
-// tem X preenchido, mas ainda fazem parte do mesmo rateio; e o valor de X
-// e so um rotulo arbitrario, pode ate coincidir com o codigo "I" de um
-// imovel completamente diferente, entao NUNCA e resolvido contra a coluna
-// A/codigo). X, quando presente em algum membro, e mostrado a parte como o
-// "rotulo usado no sistema contabil" - so texto informativo.
+// Imovel de rateio: um numero (ex: 837, 1141, 1133) que NAO e o codigo "I"
+// de nenhuma linha - e o identificador, no sistema contabil da empresa, do
+// valor real de IPTU que o proprietario paga. Varias linhas com codigo "I"
+// proprio (cada uma com sua guia/inscricao na prefeitura) sao rateadas
+// dentro desse mesmo numero. O rotulo fica guardado na coluna "Imovel de
+// rateio" (X) de cada linha que participa do rateio - e SO um texto/numero
+// livre escolhido pelo usuario, pode ate coincidir com o codigo "I" de um
+// imovel completamente diferente na planilha, entao NUNCA e resolvido
+// contra a coluna A/codigo, so contra outras linhas com o mesmo valor de X.
 async function calcularGrupoRateio(fields, rows, maxRow, sharedStrings, nParcelas) {
-  const porCodigo = new Map();
+  const rotulo = String(fields.imovelDeRateio ?? '').trim();
+  if (!rotulo) return null;
 
-  function coletarPorInscricao(campo) {
-    const alvo = normalizarInscricao(fields[campo]);
-    if (!alvo) return;
-    for (let r = 2; r <= maxRow; r++) {
-      const info = rows.get(r);
-      if (!info) continue;
-      const f = fieldsOfRow(info.xml, sharedStrings);
-      if (normalizarInscricao(f[campo]) !== alvo) continue;
-      if (!porCodigo.has(f.codigo)) porCodigo.set(f.codigo, f);
-    }
+  const membros = [];
+  for (let r = 2; r <= maxRow; r++) {
+    const info = rows.get(r);
+    if (!info) continue;
+    const f = fieldsOfRow(info.xml, sharedStrings);
+    if (String(f.imovelDeRateio ?? '').trim() !== rotulo) continue;
+
+    membros.push({
+      codigo: f.codigo,
+      proprietario: f.proprietario,
+      nominalIptu: f.nominalIptu,
+      inscricaoIptu: f.inscricaoIptu,
+      dati: f.dati,
+      formaPgto: f.formaPgto,
+      obs: f.obs,
+      iptuCotaUnica: f.iptuCotaUnica,
+      iptuParcela: f.iptuParcela,
+      iptuUltimaParcela: f.iptuUltimaParcela,
+      iptuTotalCalculado: calcTotal(f.iptuParcela, f.iptuUltimaParcela, nParcelas),
+      datiCotaUnica: f.datiCotaUnica,
+      datiParcela: f.datiParcela,
+      datiUltimaParcela: f.datiUltimaParcela,
+      datiTotalCalculado: calcTotal(f.datiParcela, f.datiUltimaParcela, nParcelas),
+    });
   }
-  coletarPorInscricao('inscricaoIptu');
-  coletarPorInscricao('dati');
-
-  if (porCodigo.size < 2) return null;
-
-  const membros = [...porCodigo.values()].map((f) => ({
-    codigo: f.codigo,
-    proprietario: f.proprietario,
-    nominalIptu: f.nominalIptu,
-    inscricaoIptu: f.inscricaoIptu,
-    dati: f.dati,
-    imovelDeRateio: f.imovelDeRateio,
-    formaPgto: f.formaPgto,
-    obs: f.obs,
-    iptuCotaUnica: f.iptuCotaUnica,
-    iptuParcela: f.iptuParcela,
-    iptuUltimaParcela: f.iptuUltimaParcela,
-    iptuTotalCalculado: calcTotal(f.iptuParcela, f.iptuUltimaParcela, nParcelas),
-    datiCotaUnica: f.datiCotaUnica,
-    datiParcela: f.datiParcela,
-    datiUltimaParcela: f.datiUltimaParcela,
-    datiTotalCalculado: calcTotal(f.datiParcela, f.datiUltimaParcela, nParcelas),
-  }));
   membros.sort((a, b) => Number(a.codigo) - Number(b.codigo));
 
   const somar = (campo) => {
@@ -287,10 +320,8 @@ async function calcularGrupoRateio(fields, rows, maxRow, sharedStrings, nParcela
     return soma || null;
   };
 
-  const rotuloContabil = membros.map((m) => m.imovelDeRateio).find((v) => v !== null && v !== undefined && String(v).trim() !== '');
-
   return {
-    rotuloContabil: rotuloContabil ?? null,
+    rotuloContabil: rotulo,
     totalImoveis: membros.length,
     imoveis: membros,
     totais: {
@@ -302,7 +333,7 @@ async function calcularGrupoRateio(fields, rows, maxRow, sharedStrings, nParcela
   };
 }
 
-async function getImovel(codigo) {
+async function getImovel(codigo, inscricao) {
   const xlsxPath = await requireXlsxPath();
   const zip = await loadZip(xlsxPath);
   const sheetXml = await zip.file(SHEET_PATH).async('string');
@@ -310,7 +341,7 @@ async function getImovel(codigo) {
   const sharedStrings = parseSharedStrings(sharedStringsXml);
   const { rows, maxRow } = indexRows(sheetXml);
 
-  const rowNum = findRowByCodigo(rows, sharedStrings, codigo);
+  const rowNum = localizarLinhaOuFalhar(rows, sharedStrings, codigo, inscricao);
   if (!rowNum) return null;
 
   const fields = fieldsOfRow(rows.get(rowNum).xml, sharedStrings);
@@ -478,7 +509,7 @@ async function lancarTributo(payload) {
     const { cellAt } = await loadListasRaw(zip);
     const nParcelas = Number(cellAt(5, 'B')) || 12;
 
-    const existingRowNum = findRowByCodigo(rows, sharedStrings, codigo);
+    const existingRowNum = localizarLinhaOuFalhar(rows, sharedStrings, codigo, payload.inscricaoIptu || payload.dati);
 
     const dataUpdates = {};
     const setIfDefined = (field, value) => {
@@ -617,7 +648,7 @@ async function lancarTributo(payload) {
   });
 }
 
-async function marcarLancado({ codigo, tributo, status }) {
+async function marcarLancado({ codigo, tributo, status, inscricao }) {
   if (!['IPTU', 'DATI'].includes(tributo)) throw new Error('tributo deve ser "IPTU" ou "DATI"');
 
   return withWriteLock(async () => {
@@ -628,7 +659,7 @@ async function marcarLancado({ codigo, tributo, status }) {
     const sharedStrings = parseSharedStrings(sharedStringsXml);
     const { rows } = indexRows(sheetXml);
 
-    const rowNum = findRowByCodigo(rows, sharedStrings, codigo);
+    const rowNum = localizarLinhaOuFalhar(rows, sharedStrings, codigo, inscricao);
     if (!rowNum) throw new Error(`Imóvel com código "${codigo}" não encontrado na planilha`);
 
     const field = tributo === 'IPTU' ? 'iptuLancado' : 'datiLancado';
@@ -661,7 +692,7 @@ const CAMPOS_NUMERICOS = new Set([
 // campos de dado da linha (sem as regras do wizard de lancamento, tipo
 // "cotaUnica" ou "quemPaga" exigidos). Nao mexe no codigo (coluna I) - pra
 // isso e melhor lancar de novo com o codigo certo do que renomear a linha.
-async function atualizarImovel(codigo, camposLivres) {
+async function atualizarImovel(codigo, camposLivres, inscricaoDesambiguacao) {
   const { codigo: _ignorado, ...brutos } = camposLivres || {};
 
   // Campos de valor precisam virar numero de verdade - se chegar string
@@ -695,7 +726,7 @@ async function atualizarImovel(codigo, camposLivres) {
     const sharedStrings = parseSharedStrings(sharedStringsXml);
     const { rows } = indexRows(sheetXml);
 
-    const rowNum = findRowByCodigo(rows, sharedStrings, codigo);
+    const rowNum = localizarLinhaOuFalhar(rows, sharedStrings, codigo, inscricaoDesambiguacao);
     if (!rowNum) throw new Error(`Imóvel com código "${codigo}" não encontrado na planilha`);
 
     const info = rows.get(rowNum);

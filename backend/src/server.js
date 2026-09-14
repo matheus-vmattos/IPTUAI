@@ -22,7 +22,9 @@ app.use('/exercicio', exercicioRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);
-  res.status(500).json({ error: err.message || 'Erro interno' });
+  const body = { error: err.message || 'Erro interno' };
+  if (err.candidatos) body.candidatos = err.candidatos;
+  res.status(err.status || 500).json(body);
 });
 
 // Backend local, sem login/multiusuário: roda só na máquina de quem está

@@ -54,13 +54,19 @@ instalar assim que a atualização estiver pronta.
 1. **Lançar**: envie um ou vários PDFs de carnê de uma vez. Para cada um,
    o sistema tenta extrair automaticamente o valor da cota única (ou das
    parcelas, identificando o valor recorrente e o valor da última parcela
-   quando diferente) e também tenta identificar o **código do imóvel pelo
-   nome do arquivo** (ex: `I213.pdf`, `213 - Rua tal.pdf`) — sempre uma
-   sugestão, revise antes de confirmar.
+   quando diferente), a **inscrição do imóvel lida de dentro do PDF**
+   (mais confiável que o nome do arquivo) e o **código do imóvel pelo
+   nome do arquivo** (ex: `I213.pdf`, `213 - Rua tal.pdf`) como reforço —
+   sempre uma sugestão, revise antes de confirmar. Quando a inscrição lida
+   bate com mais de uma linha da planilha (imóvel de rateio), o app mostra
+   as opções pra você escolher a certa.
 2. Diga se o carnê é de **IPTU ou DATI**, se é **cota única ou
    parcelado**, e o **código de identificação do imóvel** (coluna `I` da
    planilha, ex: `213`). Se o código já existir, os dados são gravados na
-   linha existente; se não existir, uma linha nova é criada. Se o nome
+   linha existente; se não existir, uma linha nova é criada. **Alguns
+   códigos existem em mais de uma linha** (ex: um "I" com mais de uma
+   inscrição/guia de IPTU) — nesse caso o app mostra a lista de linhas
+   candidatas pra você escolher qual é a certa antes de seguir. Se o nome
    impresso no carnê for diferente do proprietário (ex: guia em nome de
    terceiro), informe em **"Nome no carnê"** — os dois ficam guardados
    separadamente na planilha.
@@ -74,6 +80,12 @@ instalar assim que a atualização estiver pronta.
    pagar), marcar o tributo como lançado no sistema contábil da empresa,
    abrir o PDF do carnê salvo, ou **editar livremente** qualquer campo do
    imóvel (útil pra corrigir algo sem precisar relançar o carnê inteiro).
+   Se a busca encontrar várias linhas com o mesmo código, mostra a lista
+   pra você escolher a certa (pela inscrição). Se o imóvel fizer parte de
+   um **imóvel de rateio** (campo "Imóvel de rateio" preenchido — o número
+   usado no sistema contábil pra cobrar o proprietário, não um código
+   "I"), mostra um card com o valor de cada linha do grupo e o total
+   consolidado a lançar.
 6. **Proprietários**: painel com o resumo de todos os imóveis de um
    proprietário — quantos IPTUs, valor total (cota única e parcelado),
    quantos cada forma de pagamento ("Valoriza paga", repassado etc.) e
