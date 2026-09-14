@@ -383,11 +383,19 @@ async function lancarTributo(payload) {
     // no proximo ciclo. Se ja existia uma provisao de um lancamento
     // anterior (ciclo passado), devolve a diferenca pro valor real de agora.
     const campoProvisao = tributo === 'IPTU' ? 'iptuProvisaoProximoAno' : 'datiProvisaoProximoAno';
+    const campoProvisaoParcela = tributo === 'IPTU' ? 'iptuProvisaoParcela' : 'datiProvisaoParcela';
+    const campoProvisaoUltimaParcela =
+      tributo === 'IPTU' ? 'iptuProvisaoUltimaParcela' : 'datiProvisaoUltimaParcela';
+
     let provisaoAnterior = null;
+    let provisaoParcelaAnterior = null;
+    let provisaoUltimaParcelaAnterior = null;
     if (existingRowNum) {
       const antesDoUpdate = fieldsOfRow(rows.get(existingRowNum).xml, sharedStrings);
-      const valor = antesDoUpdate[campoProvisao];
-      provisaoAnterior = valor === null || valor === undefined || valor === '' ? null : Number(valor);
+      const aNum = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+      provisaoAnterior = aNum(antesDoUpdate[campoProvisao]);
+      provisaoParcelaAnterior = aNum(antesDoUpdate[campoProvisaoParcela]);
+      provisaoUltimaParcelaAnterior = aNum(antesDoUpdate[campoProvisaoUltimaParcela]);
     }
 
     let valorTotalDesteAno = null;
@@ -398,12 +406,38 @@ async function lancarTributo(payload) {
     }
 
     let diferenca = null;
+    let parcelaAjustada = null;
+    let ultimaParcelaAjustada = null;
+    let diferencaParcela = null;
+    let diferencaUltimaParcela = null;
+
     if (payload.reajustePct !== undefined && payload.reajustePct !== null && valorTotalDesteAno !== null) {
       const pct = Number(payload.reajustePct);
       dataUpdates[campoProvisao] = Math.round(valorTotalDesteAno * (1 + pct / 100) * 100) / 100;
+
+      if (payload.formaPgto === 'Parcelado') {
+        const parcela = Number(payload.parcela);
+        const ultima = payload.ultimaParcela !== undefined ? Number(payload.ultimaParcela) : parcela;
+        parcelaAjustada = Math.round(parcela * (1 + pct / 100) * 100) / 100;
+        ultimaParcelaAjustada = Math.round(ultima * (1 + pct / 100) * 100) / 100;
+        dataUpdates[campoProvisaoParcela] = parcelaAjustada;
+        dataUpdates[campoProvisaoUltimaParcela] = ultimaParcelaAjustada;
+      }
     }
     if (provisaoAnterior !== null && valorTotalDesteAno !== null) {
       diferenca = Math.round((valorTotalDesteAno - provisaoAnterior) * 100) / 100;
+    }
+    if (payload.formaPgto === 'Parcelado') {
+      if (provisaoParcelaAnterior !== null && payload.parcela !== undefined) {
+        diferencaParcela = Math.round((Number(payload.parcela) - provisaoParcelaAnterior) * 100) / 100;
+      }
+      if (provisaoUltimaParcelaAnterior !== null) {
+        const ultimaReal =
+          payload.ultimaParcela !== undefined ? Number(payload.ultimaParcela) : Number(payload.parcela);
+        if (!Number.isNaN(ultimaReal)) {
+          diferencaUltimaParcela = Math.round((ultimaReal - provisaoUltimaParcelaAnterior) * 100) / 100;
+        }
+      }
     }
 
     if (tributo === 'IPTU') {
@@ -457,6 +491,12 @@ async function lancarTributo(payload) {
       provisaoAnterior,
       valorTotalDesteAno,
       diferenca,
+      parcelaAjustada,
+      ultimaParcelaAjustada,
+      provisaoParcelaAnterior,
+      provisaoUltimaParcelaAnterior,
+      diferencaParcela,
+      diferencaUltimaParcela,
     };
   });
 }
@@ -495,6 +535,10 @@ const CAMPOS_NUMERICOS = new Set([
   'datiUltimaParcela',
   'iptuProvisaoProximoAno',
   'datiProvisaoProximoAno',
+  'iptuProvisaoParcela',
+  'iptuProvisaoUltimaParcela',
+  'datiProvisaoParcela',
+  'datiProvisaoUltimaParcela',
 ]);
 
 // Edicao livre de um imovel ja existente: aceita qualquer subconjunto dos

@@ -89,9 +89,13 @@ instalar assim que a atualização estiver pronta.
 8. **Provisão pro próximo exercício**: ao lançar um carnê, o app calcula e
    guarda automaticamente uma estimativa com reajuste (% padrão em
    Configurações, editável a cada lançamento) — é o valor a provisionar no
-   seu sistema contábil. No ano seguinte, ao lançar o carnê real daquele
-   mesmo imóvel, o app mostra sozinho a diferença entre o que foi
-   provisionado e o valor real, sem precisar guardar isso em outro lugar.
+   seu sistema contábil. Para lançamentos parcelados (a maioria), o app já
+   mostra a **parcela ajustada** (e a última parcela, se for diferente), não
+   só o total. No ano seguinte, ao lançar o carnê real daquele mesmo
+   imóvel, o app mostra sozinho a diferença entre o que foi provisionado e
+   o valor real — total e também **parcela a parcela**, pra você saber
+   exatamente quanto devolver ou cobrar a mais em cada parcela, sem
+   precisar guardar isso em outro lugar.
 
 ## Extração automática de valores
 

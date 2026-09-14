@@ -18,10 +18,14 @@ const CAMPOS_EDITAVEIS = [
   'iptuParcela',
   'iptuUltimaParcela',
   'iptuProvisaoProximoAno',
+  'iptuProvisaoParcela',
+  'iptuProvisaoUltimaParcela',
   'datiCotaUnica',
   'datiParcela',
   'datiUltimaParcela',
   'datiProvisaoProximoAno',
+  'datiProvisaoParcela',
+  'datiProvisaoUltimaParcela',
   'imovelDeRateio',
   'obs',
 ];
@@ -187,6 +191,14 @@ export default function Consulta() {
               {imovel.iptuProvisaoProximoAno != null && (
                 <li>Provisão próx. exercício: {formatarMoeda(imovel.iptuProvisaoProximoAno)}</li>
               )}
+              {imovel.iptuProvisaoParcela != null && (
+                <li>
+                  Provisão parcela: {formatarMoeda(imovel.iptuProvisaoParcela)}{' '}
+                  {imovel.iptuProvisaoUltimaParcela
+                    ? `(última: ${formatarMoeda(imovel.iptuProvisaoUltimaParcela)})`
+                    : ''}
+                </li>
+              )}
               <li>
                 Lançado no sistema: <strong>{imovel.iptuLancado || 'Não'}</strong>{' '}
                 {imovel.iptuLancado !== 'Feito' && (
@@ -208,6 +220,14 @@ export default function Consulta() {
               <li>Total: {formatarMoeda(imovel.datiTotalCalculado)}</li>
               {imovel.datiProvisaoProximoAno != null && (
                 <li>Provisão próx. exercício: {formatarMoeda(imovel.datiProvisaoProximoAno)}</li>
+              )}
+              {imovel.datiProvisaoParcela != null && (
+                <li>
+                  Provisão parcela: {formatarMoeda(imovel.datiProvisaoParcela)}{' '}
+                  {imovel.datiProvisaoUltimaParcela
+                    ? `(última: ${formatarMoeda(imovel.datiProvisaoUltimaParcela)})`
+                    : ''}
+                </li>
               )}
               <li>
                 Lançado no sistema: <strong>{imovel.datiLancado || 'Não'}</strong>{' '}
@@ -297,6 +317,14 @@ export default function Consulta() {
               Provisão próx. exercício (R$)
               <input type="number" step="0.01" value={form.iptuProvisaoProximoAno} onChange={(e) => atualizarCampo('iptuProvisaoProximoAno', e.target.value)} />
             </label>
+            <label>
+              Provisão parcela (R$)
+              <input type="number" step="0.01" value={form.iptuProvisaoParcela} onChange={(e) => atualizarCampo('iptuProvisaoParcela', e.target.value)} />
+            </label>
+            <label>
+              Provisão última parcela (R$)
+              <input type="number" step="0.01" value={form.iptuProvisaoUltimaParcela} onChange={(e) => atualizarCampo('iptuProvisaoUltimaParcela', e.target.value)} />
+            </label>
           </div>
 
           <div className="card">
@@ -327,6 +355,14 @@ export default function Consulta() {
             <label>
               Provisão próx. exercício (R$)
               <input type="number" step="0.01" value={form.datiProvisaoProximoAno} onChange={(e) => atualizarCampo('datiProvisaoProximoAno', e.target.value)} />
+            </label>
+            <label>
+              Provisão parcela (R$)
+              <input type="number" step="0.01" value={form.datiProvisaoParcela} onChange={(e) => atualizarCampo('datiProvisaoParcela', e.target.value)} />
+            </label>
+            <label>
+              Provisão última parcela (R$)
+              <input type="number" step="0.01" value={form.datiProvisaoUltimaParcela} onChange={(e) => atualizarCampo('datiProvisaoUltimaParcela', e.target.value)} />
             </label>
           </div>
 

@@ -30,10 +30,17 @@ const COLUMNS = {
   obs: 'Y',
   // Z = Chave busca (fórmula)
   // AA = Ordem busca (fórmula)
-  // AB/AC: adicionadas pelo app (ver excelStore.ensureColunasProvisao) -
+  // AB-AG: adicionadas pelo app (ver excelStore.ensureColunasProvisao) -
   // não existiam na planilha original do usuário.
   iptuProvisaoProximoAno: 'AB',
   datiProvisaoProximoAno: 'AC',
+  // Provisão quebrada por parcela (a maioria dos lançamentos é parcelado) -
+  // permite mostrar/guardar o valor da parcela já com reajuste, e no ano
+  // seguinte comparar parcela a parcela (não só o total).
+  iptuProvisaoParcela: 'AD',
+  iptuProvisaoUltimaParcela: 'AE',
+  datiProvisaoParcela: 'AF',
+  datiProvisaoUltimaParcela: 'AG',
 };
 
 // Nome (header) de cada coluna que o app pode precisar criar sozinho na
@@ -41,6 +48,10 @@ const COLUMNS = {
 const COLUNAS_OPCIONAIS = [
   { field: 'iptuProvisaoProximoAno', nome: 'IPTU provisão próx. exercício' },
   { field: 'datiProvisaoProximoAno', nome: 'DATI provisão próx. exercício' },
+  { field: 'iptuProvisaoParcela', nome: 'IPTU provisão parcela' },
+  { field: 'iptuProvisaoUltimaParcela', nome: 'IPTU provisão última parcela' },
+  { field: 'datiProvisaoParcela', nome: 'DATI provisão parcela' },
+  { field: 'datiProvisaoUltimaParcela', nome: 'DATI provisão última parcela' },
 ];
 
 const FORMULA_COLUMNS = { contaNoTotal: 'I', iptuTotal: 'M', datiTotal: 'Q', valorAPagar: 'R', chaveBusca: 'Z', ordemBusca: 'AA' };

@@ -233,6 +233,7 @@ export default function Upload() {
           status: 'sucesso',
           criado: data.created,
           diferenca: data.diferenca,
+          diferencaParcela: data.diferencaParcela,
         },
       ]);
       await abrirItem(fila, indice + 1);
@@ -301,7 +302,10 @@ export default function Upload() {
                     ✓ {r.arquivo} — código <strong>{r.codigo}</strong>
                     {r.criado ? ' (linha nova)' : ''}
                     {r.diferenca !== null && r.diferenca !== undefined && (
-                      <> — diferença a lançar: {formatarMoeda(r.diferenca)}</>
+                      <> — diferença total: {formatarMoeda(r.diferenca)}</>
+                    )}
+                    {r.diferencaParcela !== null && r.diferencaParcela !== undefined && (
+                      <> (por parcela: {formatarMoeda(r.diferencaParcela)})</>
                     )}
                   </>
                 ) : (
@@ -445,6 +449,26 @@ export default function Upload() {
                   )}
                 </strong>
               </p>
+              {item.formaPgto === 'Parcelado' &&
+                item.parcela !== '' &&
+                !isNaN(Number(item.reajustePct)) &&
+                (() => {
+                  const pct = Number(item.reajustePct);
+                  const parcelaAjustada = Number(item.parcela) * (1 + pct / 100);
+                  const ultimaBase = item.ultimaParcela === '' ? item.parcela : item.ultimaParcela;
+                  const ultimaAjustada = Number(ultimaBase) * (1 + pct / 100);
+                  return (
+                    <p className="meta">
+                      Parcela ajustada: <strong>{formatarMoeda(parcelaAjustada)}</strong>
+                      {ultimaAjustada !== parcelaAjustada && (
+                        <>
+                          {' '}
+                          (última: <strong>{formatarMoeda(ultimaAjustada)}</strong>)
+                        </>
+                      )}
+                    </p>
+                  );
+                })()}
             </div>
           )}
 
@@ -569,6 +593,27 @@ export default function Upload() {
             if (provisaoAnterior === null || provisaoAnterior === undefined) return null;
             const total = valorTotalDoItem(item, config?.listas?.nParcelas || 1);
             const diferenca = total === null ? null : total - provisaoAnterior;
+
+            const provisaoParcelaAnterior =
+              item.tributo === 'IPTU'
+                ? item.imovelEncontrado?.iptuProvisaoParcela
+                : item.imovelEncontrado?.datiProvisaoParcela;
+            const provisaoUltimaParcelaAnterior =
+              item.tributo === 'IPTU'
+                ? item.imovelEncontrado?.iptuProvisaoUltimaParcela
+                : item.imovelEncontrado?.datiProvisaoUltimaParcela;
+
+            const mostrarPorParcela =
+              item.formaPgto === 'Parcelado' &&
+              provisaoParcelaAnterior !== null &&
+              provisaoParcelaAnterior !== undefined;
+            const diferencaParcela = mostrarPorParcela ? Number(item.parcela) - provisaoParcelaAnterior : null;
+            const ultimaReal = item.ultimaParcela === '' ? item.parcela : item.ultimaParcela;
+            const diferencaUltimaParcela =
+              mostrarPorParcela && provisaoUltimaParcelaAnterior !== null && provisaoUltimaParcelaAnterior !== undefined
+                ? Number(ultimaReal) - provisaoUltimaParcelaAnterior
+                : null;
+
             return (
               <div className="card destaque">
                 <p className="meta">Já havia uma provisão de um lançamento anterior pra este imóvel:</p>
@@ -576,8 +621,21 @@ export default function Upload() {
                   <li>Provisionado: {formatarMoeda(provisaoAnterior)}</li>
                   <li>Valor real agora: {formatarMoeda(total)}</li>
                   <li>
-                    <strong>Diferença a lançar: {formatarMoeda(diferenca)}</strong>
+                    <strong>Diferença total: {formatarMoeda(diferenca)}</strong>
                   </li>
+                  {mostrarPorParcela && (
+                    <>
+                      <li>Parcela provisionada: {formatarMoeda(provisaoParcelaAnterior)}</li>
+                      <li>
+                        <strong>Diferença por parcela (devolver/cobrar): {formatarMoeda(diferencaParcela)}</strong>
+                      </li>
+                      {diferencaUltimaParcela !== null && diferencaUltimaParcela !== diferencaParcela && (
+                        <li>
+                          <strong>Diferença na última parcela: {formatarMoeda(diferencaUltimaParcela)}</strong>
+                        </li>
+                      )}
+                    </>
+                  )}
                 </ul>
               </div>
             );
