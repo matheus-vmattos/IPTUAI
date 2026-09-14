@@ -32,6 +32,29 @@ function itemVazio() {
     obs: '',
     escolhendoCotaUnica: false,
     reajustePct: '',
+    modoRateio: false,
+    rateioRotulo: '',
+    rateioBuscando: false,
+    rateioMembros: [],
+  };
+}
+
+let proximaChaveMembro = 1;
+function membroVazio(dadosIniciais) {
+  return {
+    key: proximaChaveMembro++,
+    codigo: '',
+    inscricaoIptu: '',
+    dati: '',
+    proprietario: '',
+    nominalIptu: '',
+    quemPaga: '',
+    cotaUnica: '',
+    parcela: '',
+    ultimaParcela: '',
+    obs: '',
+    existente: false,
+    ...dadosIniciais,
   };
 }
 
@@ -229,6 +252,167 @@ export default function Upload() {
   function valoresValidos() {
     if (item.formaPgto === 'Cota única') return item.cotaUnica !== '' && !isNaN(Number(item.cotaUnica));
     return item.parcela !== '' && !isNaN(Number(item.parcela));
+  }
+
+  // Valor total do carnê (o que o wizard já coletou no passo "valores") -
+  // referência pra dividir entre as linhas do rateio. A divisão em si não é
+  // automática: só serve de ponto de partida, cada linha é editável.
+  function valorTotalReferenciaRateio() {
+    return valorTotalDoItem(item, config?.listas?.nParcelas || 1);
+  }
+
+  function atualizarMembro(key, campos) {
+    setItem((prev) => ({
+      ...prev,
+      rateioMembros: prev.rateioMembros.map((m) => (m.key === key ? { ...m, ...campos } : m)),
+    }));
+  }
+
+  function removerMembro(key) {
+    setItem((prev) => ({ ...prev, rateioMembros: prev.rateioMembros.filter((m) => m.key !== key) }));
+  }
+
+  // Busca (ou inicia) o grupo de rateio pelo rótulo - se já existir, traz as
+  // linhas que já fazem parte dele como sugestão (todas editáveis: dá pra
+  // tirar quem não deve entrar dessa vez, ou adicionar outra). O valor de
+  // cada linha começa como total/N (divisão igual), só um ponto de partida.
+  async function buscarGrupoRateio(rotulo) {
+    atualizarItem({ rateioRotulo: rotulo });
+    if (!rotulo.trim()) return;
+    setItem((prev) => ({ ...prev, rateioBuscando: true }));
+    try {
+      const { data } = await api.get(`/rateios/${encodeURIComponent(rotulo.trim())}`);
+      const total = valorTotalReferenciaRateio();
+      const n = data.imoveis.length || 1;
+      const sugestao = total !== null ? String(Math.round((total / n) * 100) / 100) : '';
+      const membros = data.imoveis.map((m) =>
+        membroVazio({
+          codigo: String(m.codigo),
+          inscricaoIptu: m.inscricaoIptu || '',
+          dati: m.dati || '',
+          proprietario: m.proprietario || '',
+          nominalIptu: m.nominalIptu || '',
+          obs: m.obs || '',
+          cotaUnica: item.formaPgto === 'Cota única' ? sugestao : '',
+          parcela: item.formaPgto === 'Parcelado' ? sugestao : '',
+          existente: true,
+        })
+      );
+      setItem((prev) => ({ ...prev, rateioMembros: membros, rateioBuscando: false }));
+    } catch (err) {
+      setItem((prev) => ({ ...prev, rateioBuscando: false }));
+      setError(apiErrorMessage(err));
+    }
+  }
+
+  // Adiciona uma linha "I" ao grupo (existente na planilha ou nova) - busca
+  // os dados pra prefilar proprietário/inscrição quando já existir.
+  async function adicionarMembroRateio(codigoStr) {
+    const codigo = codigoStr.trim();
+    if (!codigo) return;
+    if (item.rateioMembros.some((m) => m.codigo === codigo)) return;
+
+    try {
+      const { data } = await api.get(`/imoveis/${encodeURIComponent(codigo)}`);
+      setItem((prev) => ({
+        ...prev,
+        rateioMembros: [
+          ...prev.rateioMembros,
+          membroVazio({
+            codigo,
+            inscricaoIptu: data.inscricaoIptu || '',
+            dati: data.dati || '',
+            proprietario: data.proprietario || '',
+            nominalIptu: data.nominalIptu || '',
+            existente: true,
+          }),
+        ],
+      }));
+    } catch (err) {
+      if (err?.response?.status === 404) {
+        setItem((prev) => ({
+          ...prev,
+          rateioMembros: [...prev.rateioMembros, membroVazio({ codigo, existente: false })],
+        }));
+      } else {
+        setError(apiErrorMessage(err));
+      }
+    }
+  }
+
+  function somaMembrosRateio() {
+    return item.rateioMembros.reduce((acc, m) => {
+      const v = item.formaPgto === 'Cota única' ? Number(m.cotaUnica) : Number(m.parcela);
+      return acc + (isNaN(v) ? 0 : v);
+    }, 0);
+  }
+
+  function rateioValido() {
+    if (!item.rateioRotulo.trim() || item.rateioMembros.length === 0) return false;
+    return item.rateioMembros.every((m) => {
+      if (!m.codigo.trim() || !m.quemPaga) return false;
+      if (item.formaPgto === 'Cota única') return m.cotaUnica !== '' && !isNaN(Number(m.cotaUnica));
+      return m.parcela !== '' && !isNaN(Number(m.parcela));
+    });
+  }
+
+  async function confirmarRateio() {
+    setError('');
+    setLoading(true);
+    try {
+      const form = new FormData();
+      const arquivo = fila[indice].arquivo;
+      form.append('arquivo', arquivo, arquivo.name);
+      form.append('rotulo', item.rateioRotulo.trim());
+      form.append('tributo', item.tributo);
+
+      const itens = item.rateioMembros.map((m) => {
+        const it = {
+          codigo: m.codigo.trim(),
+          formaPgto: item.formaPgto,
+          proprietario: m.proprietario || undefined,
+          nominalIptu: m.nominalIptu || undefined,
+          quemPaga: m.quemPaga || undefined,
+          obs: m.obs || undefined,
+        };
+        if (item.tributo === 'IPTU') it.inscricaoIptu = m.inscricaoIptu || undefined;
+        if (item.tributo === 'DATI') it.dati = m.dati || undefined;
+        if (item.formaPgto === 'Cota única') {
+          it.cotaUnica = m.cotaUnica;
+        } else {
+          it.parcela = m.parcela;
+          if (m.ultimaParcela !== '') it.ultimaParcela = m.ultimaParcela;
+        }
+        return it;
+      });
+      form.append('itens', JSON.stringify(itens));
+
+      const { data } = await api.post('/lancamentos/rateio', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const sucesso = data.resultados.filter((r) => r.status === 'sucesso').length;
+      const falha = data.resultados.filter((r) => r.status === 'erro');
+      setResultados((prev) => [
+        ...prev,
+        {
+          arquivo: arquivo.name,
+          status: falha.length === 0 ? 'sucesso' : 'erro',
+          codigo: `rateio ${data.rotulo}`,
+          mensagem:
+            falha.length > 0
+              ? `${sucesso} de ${data.resultados.length} linhas salvas — falhou: ${falha
+                  .map((f) => `I ${f.codigo} (${f.mensagem})`)
+                  .join('; ')}`
+              : undefined,
+        },
+      ]);
+      await abrirItem(fila, indice + 1);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function confirmar() {
@@ -521,6 +705,154 @@ export default function Upload() {
         <div className="card">
           <h3>Código de identificação do imóvel</h3>
 
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={item.modoRateio}
+              onChange={(e) =>
+                atualizarItem({
+                  modoRateio: e.target.checked,
+                  codigo: '',
+                  imovelEncontrado: null,
+                  imovelNovo: false,
+                  candidatosAmbiguos: null,
+                })
+              }
+            />
+            Este carnê é de um imóvel de rateio (um valor dividido entre várias linhas "I")
+          </label>
+
+          {item.modoRateio && (
+            <div className="card destaque">
+              <label>
+                Número do imóvel de rateio (não é o código "I" — é o número usado no sistema contábil)
+                <input
+                  value={item.rateioRotulo}
+                  onChange={(e) => atualizarItem({ rateioRotulo: e.target.value })}
+                  onBlur={(e) => buscarGrupoRateio(e.target.value)}
+                  placeholder="ex: 837"
+                />
+              </label>
+              {item.rateioBuscando && <p className="meta">Buscando linhas desse grupo...</p>}
+
+              {item.rateioMembros.length > 0 && (
+                <>
+                  <p className="meta">
+                    Valor de referência do carnê: {formatarMoeda(valorTotalReferenciaRateio())} — soma das linhas
+                    abaixo: {formatarMoeda(somaMembrosRateio())}
+                    {(() => {
+                      const total = valorTotalReferenciaRateio();
+                      const soma = somaMembrosRateio();
+                      if (total === null) return null;
+                      const diff = Math.round((soma - total) * 100) / 100;
+                      return diff !== 0 ? <> — diferença: {formatarMoeda(diff)}</> : <> ✓</>;
+                    })()}
+                  </p>
+                  <ul className="resumo-list">
+                    {item.rateioMembros.map((m) => (
+                      <li key={m.key} className="card">
+                        <strong>I {m.codigo || '(novo)'}</strong> — {m.nominalIptu || m.proprietario || 'sem nome'}
+                        {!m.existente && ' (linha nova)'}
+                        <button type="button" className="link-btn" onClick={() => removerMembro(m.key)}>
+                          remover
+                        </button>
+                        <label>
+                          Proprietário
+                          <input
+                            value={m.proprietario}
+                            onChange={(e) => atualizarMembro(m.key, { proprietario: e.target.value })}
+                          />
+                        </label>
+                        {item.tributo === 'IPTU' ? (
+                          <label>
+                            Inscrição IPTU
+                            <input
+                              value={m.inscricaoIptu}
+                              onChange={(e) => atualizarMembro(m.key, { inscricaoIptu: e.target.value })}
+                            />
+                          </label>
+                        ) : (
+                          <label>
+                            Inscrição DATI
+                            <input value={m.dati} onChange={(e) => atualizarMembro(m.key, { dati: e.target.value })} />
+                          </label>
+                        )}
+                        <label>
+                          Quem paga
+                          <select value={m.quemPaga} onChange={(e) => atualizarMembro(m.key, { quemPaga: e.target.value })}>
+                            <option value="">—</option>
+                            {(config?.listas?.quemPagaOpcoes || []).map((op) => (
+                              <option key={op} value={op}>
+                                {op}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        {item.formaPgto === 'Cota única' ? (
+                          <label>
+                            Valor desta linha (R$)
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={m.cotaUnica}
+                              onChange={(e) => atualizarMembro(m.key, { cotaUnica: e.target.value })}
+                            />
+                          </label>
+                        ) : (
+                          <>
+                            <label>
+                              Parcela desta linha (R$)
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={m.parcela}
+                                onChange={(e) => atualizarMembro(m.key, { parcela: e.target.value })}
+                              />
+                            </label>
+                            <label>
+                              Última parcela (R$, deixe em branco se igual)
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={m.ultimaParcela}
+                                onChange={(e) => atualizarMembro(m.key, { ultimaParcela: e.target.value })}
+                              />
+                            </label>
+                          </>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              <label>
+                Adicionar linha "I" ao grupo
+                <input
+                  placeholder="código, aperte Enter"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      adicionarMembroRateio(e.currentTarget.value);
+                      e.currentTarget.value = '';
+                    }
+                  }}
+                />
+              </label>
+
+              <div className="actions-row">
+                <button className="link-btn" onClick={() => setStep(2)}>
+                  ← Voltar
+                </button>
+                <button disabled={!rateioValido() || loading} onClick={confirmarRateio}>
+                  {loading ? 'Salvando...' : 'Salvar rateio na planilha'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!item.modoRateio && (
+            <>
           {(() => {
             const { inscricaoDetectada, imoveisPorInscricao } = fila[indice]?.extracao || {};
             if (!inscricaoDetectada || (imoveisPorInscricao || []).length < 2) return null;
@@ -635,6 +967,8 @@ export default function Upload() {
               Continuar
             </button>
           </div>
+            </>
+          )}
         </div>
       )}
 

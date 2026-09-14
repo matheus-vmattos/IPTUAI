@@ -284,35 +284,24 @@ async function listImoveis(query) {
 // livre escolhido pelo usuario, pode ate coincidir com o codigo "I" de um
 // imovel completamente diferente na planilha, entao NUNCA e resolvido
 // contra a coluna A/codigo, so contra outras linhas com o mesmo valor de X.
-async function calcularGrupoRateio(fields, rows, maxRow, sharedStrings, nParcelas) {
-  const rotulo = String(fields.imovelDeRateio ?? '').trim();
-  if (!rotulo) return null;
-
-  const membros = [];
-  for (let r = 2; r <= maxRow; r++) {
-    const info = rows.get(r);
-    if (!info) continue;
-    const f = fieldsOfRow(info.xml, sharedStrings);
-    if (String(f.imovelDeRateio ?? '').trim() !== rotulo) continue;
-
-    membros.push({
-      codigo: f.codigo,
-      proprietario: f.proprietario,
-      nominalIptu: f.nominalIptu,
-      inscricaoIptu: f.inscricaoIptu,
-      dati: f.dati,
-      formaPgto: f.formaPgto,
-      obs: f.obs,
-      iptuCotaUnica: f.iptuCotaUnica,
-      iptuParcela: f.iptuParcela,
-      iptuUltimaParcela: f.iptuUltimaParcela,
-      iptuTotalCalculado: calcTotal(f.iptuParcela, f.iptuUltimaParcela, nParcelas),
-      datiCotaUnica: f.datiCotaUnica,
-      datiParcela: f.datiParcela,
-      datiUltimaParcela: f.datiUltimaParcela,
-      datiTotalCalculado: calcTotal(f.datiParcela, f.datiUltimaParcela, nParcelas),
-    });
-  }
+function montarGrupoRateio(rotulo, membrosFields, nParcelas) {
+  const membros = membrosFields.map((f) => ({
+    codigo: f.codigo,
+    proprietario: f.proprietario,
+    nominalIptu: f.nominalIptu,
+    inscricaoIptu: f.inscricaoIptu,
+    dati: f.dati,
+    formaPgto: f.formaPgto,
+    obs: f.obs,
+    iptuCotaUnica: f.iptuCotaUnica,
+    iptuParcela: f.iptuParcela,
+    iptuUltimaParcela: f.iptuUltimaParcela,
+    iptuTotalCalculado: calcTotal(f.iptuParcela, f.iptuUltimaParcela, nParcelas),
+    datiCotaUnica: f.datiCotaUnica,
+    datiParcela: f.datiParcela,
+    datiUltimaParcela: f.datiUltimaParcela,
+    datiTotalCalculado: calcTotal(f.datiParcela, f.datiUltimaParcela, nParcelas),
+  }));
   membros.sort((a, b) => Number(a.codigo) - Number(b.codigo));
 
   const somar = (campo) => {
@@ -331,6 +320,111 @@ async function calcularGrupoRateio(fields, rows, maxRow, sharedStrings, nParcela
       datiParcelado: somar('datiTotalCalculado'),
     },
   };
+}
+
+async function calcularGrupoRateio(fields, rows, maxRow, sharedStrings, nParcelas) {
+  const rotulo = String(fields.imovelDeRateio ?? '').trim();
+  if (!rotulo) return null;
+
+  const membrosFields = [];
+  for (let r = 2; r <= maxRow; r++) {
+    const info = rows.get(r);
+    if (!info) continue;
+    const f = fieldsOfRow(info.xml, sharedStrings);
+    if (String(f.imovelDeRateio ?? '').trim() !== rotulo) continue;
+    membrosFields.push(f);
+  }
+  return montarGrupoRateio(rotulo, membrosFields, nParcelas);
+}
+
+// Lista todos os rotulos de "Imovel de rateio" ja usados na planilha, com
+// os membros de cada um - alimenta o painel de rateios e a busca no fluxo
+// de lancar (pra reconhecer qual grupo e qual sem ter que decorar numero).
+async function listarGruposDeRateio() {
+  const xlsxPath = await requireXlsxPath();
+  const zip = await loadZip(xlsxPath);
+  const sheetXml = await zip.file(SHEET_PATH).async('string');
+  const sharedStringsXml = await zip.file(SHARED_STRINGS_PATH).async('string');
+  const sharedStrings = parseSharedStrings(sharedStringsXml);
+  const { rows, maxRow } = indexRows(sheetXml);
+  const { cellAt } = await loadListasRaw(zip);
+  const nParcelas = Number(cellAt(5, 'B')) || 12;
+
+  const porRotulo = new Map();
+  for (let r = 2; r <= maxRow; r++) {
+    const info = rows.get(r);
+    if (!info) continue;
+    const f = fieldsOfRow(info.xml, sharedStrings);
+    const rotulo = String(f.imovelDeRateio ?? '').trim();
+    if (!rotulo) continue;
+    if (!porRotulo.has(rotulo)) porRotulo.set(rotulo, []);
+    porRotulo.get(rotulo).push(f);
+  }
+
+  const grupos = [...porRotulo.entries()].map(([rotulo, membrosFields]) =>
+    montarGrupoRateio(rotulo, membrosFields, nParcelas)
+  );
+  grupos.sort((a, b) => a.rotuloContabil.localeCompare(b.rotuloContabil, undefined, { numeric: true }));
+  return grupos;
+}
+
+// Busca um grupo especifico pelo rotulo - devolve grupo vazio (nao null)
+// se o rotulo ainda nao existir em nenhuma linha, pra o fluxo de "criar um
+// rateio novo" poder usar a mesma tela sem tratar caso especial.
+async function getGrupoDeRateio(rotulo) {
+  const alvo = String(rotulo ?? '').trim();
+  if (!alvo) return { rotuloContabil: '', totalImoveis: 0, imoveis: [], totais: {} };
+  const grupos = await listarGruposDeRateio();
+  return grupos.find((g) => g.rotuloContabil === alvo) || { rotuloContabil: alvo, totalImoveis: 0, imoveis: [], totais: {} };
+}
+
+// Imoveis ainda sem carne lancado neste exercicio (coluna "salvo" != Feito)
+// - so conta pendencia de IPTU/DATI pra quem de fato tem inscricao daquele
+// tributo (ignora "Não tem"/vazio). Visao geral de "o que falta lancar".
+function temValorReal(v) {
+  if (v === null || v === undefined) return false;
+  const s = String(v).trim();
+  return s !== '' && s.toLowerCase() !== 'não tem';
+}
+
+async function listarPendencias() {
+  const xlsxPath = await requireXlsxPath();
+  const zip = await loadZip(xlsxPath);
+  const sheetXml = await zip.file(SHEET_PATH).async('string');
+  const sharedStringsXml = await zip.file(SHARED_STRINGS_PATH).async('string');
+  const sharedStrings = parseSharedStrings(sharedStringsXml);
+  const { rows, maxRow } = indexRows(sheetXml);
+
+  const pendentesIptu = [];
+  const pendentesDati = [];
+  for (let r = 2; r <= maxRow; r++) {
+    const info = rows.get(r);
+    if (!info) continue;
+    const f = fieldsOfRow(info.xml, sharedStrings);
+    if (f.codigo === null && !f.proprietario) continue;
+
+    if (temValorReal(f.inscricaoIptu) && f.iptuSalvo !== 'Feito') {
+      pendentesIptu.push({
+        codigo: f.codigo,
+        proprietario: f.proprietario,
+        nominalIptu: f.nominalIptu,
+        inscricaoIptu: f.inscricaoIptu,
+        imovelDeRateio: f.imovelDeRateio,
+        obs: f.obs,
+      });
+    }
+    if (temValorReal(f.dati) && f.datiSalvo !== 'Feito') {
+      pendentesDati.push({
+        codigo: f.codigo,
+        proprietario: f.proprietario,
+        nominalIptu: f.nominalIptu,
+        dati: f.dati,
+        imovelDeRateio: f.imovelDeRateio,
+        obs: f.obs,
+      });
+    }
+  }
+  return { pendentesIptu, pendentesDati };
 }
 
 async function getImovel(codigo, inscricao) {
@@ -921,4 +1015,7 @@ module.exports = {
   listarProprietarios,
   getResumoProprietario,
   ensureColunasProvisao,
+  listarGruposDeRateio,
+  getGrupoDeRateio,
+  listarPendencias,
 };

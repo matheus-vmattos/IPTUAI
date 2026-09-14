@@ -69,7 +69,14 @@ instalar assim que a atualização estiver pronta.
    candidatas pra você escolher qual é a certa antes de seguir. Se o nome
    impresso no carnê for diferente do proprietário (ex: guia em nome de
    terceiro), informe em **"Nome no carnê"** — os dois ficam guardados
-   separadamente na planilha.
+   separadamente na planilha. Se o carnê for de um **imóvel de rateio**
+   (um único carnê cujo valor se divide entre várias linhas "I", e que é
+   controlado por um número usado no seu sistema contábil, não pelo
+   código "I"), marque a opção "imóvel de rateio", informe esse número e
+   monte a lista de linhas que participam — o app já sugere as linhas do
+   grupo (se já existir) e uma divisão inicial igual, mas cada linha é
+   editável, já que a divisão real costuma variar. O PDF é salvo uma vez
+   só e fica acessível a partir de qualquer uma das linhas do grupo.
 3. Escolha **quem paga** (lista vem da própria planilha, aba "Listas").
 4. Confirme — os valores, o proprietário/inscrição e o link do PDF salvo
    são gravados na linha do imóvel, e a coluna "salvo" desse tributo é
@@ -85,7 +92,10 @@ instalar assim que a atualização estiver pronta.
    um **imóvel de rateio** (campo "Imóvel de rateio" preenchido — o número
    usado no sistema contábil pra cobrar o proprietário, não um código
    "I"), mostra um card com o valor de cada linha do grupo e o total
-   consolidado a lançar.
+   consolidado a lançar, com um botão pra **remover uma linha do grupo**
+   (não mexe nos valores já lançados, só tira o rótulo). Pra ajustar a
+   divisão ou trocar o carnê, é só lançar de novo em "Lançar" informando
+   o mesmo número de rateio.
 6. **Proprietários**: painel com o resumo de todos os imóveis de um
    proprietário — quantos IPTUs, valor total (cota única e parcelado),
    quantos cada forma de pagamento ("Valoriza paga", repassado etc.) e
@@ -108,6 +118,11 @@ instalar assim que a atualização estiver pronta.
    o valor real — total e também **parcela a parcela**, pra você saber
    exatamente quanto devolver ou cobrar a mais em cada parcela, sem
    precisar guardar isso em outro lugar.
+9. **Painel**: visão geral pra entender onde lançar um carnê — lista todos
+   os imóveis de rateio já usados (com as linhas de cada um) pra
+   reconhecer rápido qual é qual, e as pendências do exercício (imóveis
+   ainda sem carnê lançado, separado por IPTU/DATI). Clicar num item leva
+   direto pra tela de Consultar daquele imóvel.
 
 ## Extração automática de valores
 

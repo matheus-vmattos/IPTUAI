@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { api, apiErrorMessage } from '../api.js';
 
 function formatarMoeda(valor) {
@@ -51,12 +52,23 @@ export default function Consulta() {
   const [form, setForm] = useState({});
   const [salvando, setSalvando] = useState(false);
 
+  const location = useLocation();
+
   useEffect(() => {
     api
       .get('/config')
       .then(({ data }) => setConfig(data))
       .catch(() => {});
   }, []);
+
+  // Chegando de outra tela (ex: Painel) com um código já escolhido - abre
+  // direto, sem precisar buscar de novo.
+  useEffect(() => {
+    if (location.state?.codigo) {
+      abrirImovel(location.state.codigo, location.state.inscricao);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   async function buscar(e) {
     e?.preventDefault();
@@ -105,6 +117,25 @@ export default function Consulta() {
         inscricao: imovel.inscricaoIptu || imovel.dati,
       });
       abrirImovel(imovel.codigo, imovel.inscricaoIptu || imovel.dati);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    }
+  }
+
+  // Tira uma linha do grupo de rateio (limpa só o rótulo "Imóvel de
+  // rateio" dessa linha - os valores já lançados continuam lá, editáveis
+  // manualmente se precisar). codigoMembro/inscricaoMembro identificam a
+  // linha certa mesmo quando o código se repete em mais de uma.
+  async function removerDoRateio(codigoMembro, inscricaoMembro) {
+    if (!window.confirm(`Remover I ${codigoMembro} deste imóvel de rateio?`)) return;
+    setError('');
+    try {
+      await api.patch(
+        `/imoveis/${encodeURIComponent(codigoMembro)}`,
+        { imovelDeRateio: '' },
+        { params: inscricaoMembro ? { inscricao: inscricaoMembro } : undefined }
+      );
+      await abrirImovel(imovel.codigo, imovel.inscricaoIptu || imovel.dati);
     } catch (err) {
       setError(apiErrorMessage(err));
     }
@@ -268,16 +299,11 @@ export default function Consulta() {
 
           {imovel.grupoRateio && (
             <div className="card destaque">
-              <h4>Imóvel de rateio ({imovel.grupoRateio.totalImoveis} linhas, mesma inscrição)</h4>
+              <h4>Imóvel de rateio {imovel.grupoRateio.rotuloContabil}</h4>
               <p className="meta">
-                Este imóvel faz parte de um rateio (mesma inscrição em {imovel.grupoRateio.totalImoveis} linhas
-                da planilha).{' '}
-                {imovel.grupoRateio.rotuloContabil && (
-                  <>
-                    Rótulo usado no sistema contábil: <strong>{imovel.grupoRateio.rotuloContabil}</strong>.{' '}
-                  </>
-                )}
-                Valor consolidado pra lançar de uma vez:
+                Número usado no sistema contábil pra cobrar o proprietário pelo total das{' '}
+                {imovel.grupoRateio.totalImoveis} linhas abaixo (não é código "I" de nenhuma delas). Valor
+                consolidado pra lançar de uma vez:
               </p>
               <ul className="resumo-list">
                 {imovel.grupoRateio.totais.iptuCotaUnica != null && (
@@ -295,17 +321,30 @@ export default function Consulta() {
               </ul>
               <p className="meta">Linhas do grupo (valor de cada unidade):</p>
               <ul className="resumo-list">
-                {imovel.grupoRateio.imoveis.map((m) => (
-                  <li key={m.codigo}>
+                {imovel.grupoRateio.imoveis.map((m, i) => (
+                  <li key={`${m.codigo}-${m.inscricaoIptu || m.dati || i}`}>
                     I {m.codigo} — {m.nominalIptu || m.proprietario}
                     {': '}
                     {m.formaPgto === 'Cota única'
                       ? formatarMoeda((Number(m.iptuCotaUnica) || 0) + (Number(m.datiCotaUnica) || 0))
                       : formatarMoeda((Number(m.iptuTotalCalculado) || 0) + (Number(m.datiTotalCalculado) || 0))}
-                    {m.codigo === imovel.codigo && ' (este)'}
+                    {m.codigo === imovel.codigo && m.inscricaoIptu === imovel.inscricaoIptu && ' (este)'}
+                    {' — '}
+                    <button
+                      type="button"
+                      className="link-btn"
+                      onClick={() => removerDoRateio(m.codigo, m.inscricaoIptu || m.dati)}
+                    >
+                      remover deste rateio
+                    </button>
                   </li>
                 ))}
               </ul>
+              <p className="meta">
+                Pra ajustar a divisão ou trocar o carnê, use "Lançar" de novo informando o número{' '}
+                {imovel.grupoRateio.rotuloContabil} como imóvel de rateio — as linhas já aparecem prontas pra
+                editar.
+              </p>
             </div>
           )}
         </div>

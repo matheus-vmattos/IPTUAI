@@ -2,6 +2,7 @@ import { HashRouter, Routes, Route, Navigate, NavLink } from 'react-router-dom';
 import Upload from './pages/Upload.jsx';
 import Consulta from './pages/Consulta.jsx';
 import Proprietarios from './pages/Proprietarios.jsx';
+import Painel from './pages/Painel.jsx';
 import Config from './pages/Config.jsx';
 
 function Shell({ children }) {
@@ -13,6 +14,7 @@ function Shell({ children }) {
           <NavLink to="/upload">Lançar</NavLink>
           <NavLink to="/consulta">Consultar</NavLink>
           <NavLink to="/proprietarios">Proprietários</NavLink>
+          <NavLink to="/painel">Painel</NavLink>
           <NavLink to="/config">Configurações</NavLink>
         </nav>
       </header>
@@ -29,6 +31,7 @@ export default function App() {
           <Route path="/upload" element={<Upload />} />
           <Route path="/consulta" element={<Consulta />} />
           <Route path="/proprietarios" element={<Proprietarios />} />
+          <Route path="/painel" element={<Painel />} />
           <Route path="/config" element={<Config />} />
           <Route path="*" element={<Navigate to="/upload" replace />} />
         </Routes>
