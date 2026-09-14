@@ -356,6 +356,37 @@ export default function Upload() {
     });
   }
 
+  // Quando a inscrição do carnê bate em várias linhas, isso já é um forte
+  // sinal de imóvel de rateio - em vez de obrigar a escolher só uma linha,
+  // oferece ir direto pro modo rateio com essas linhas pré-carregadas. Se
+  // alguma já tiver o rótulo do rateio marcado (coluna X), usa ele pra
+  // trazer o grupo completo (pode ter mais linhas que só as da inscrição).
+  async function usarModoRateioComCandidatos(candidatos) {
+    const rotuloComum = candidatos.map((c) => c.imovelDeRateio).find((v) => v !== null && v !== undefined && String(v).trim() !== '');
+    atualizarItem({ modoRateio: true });
+    if (rotuloComum) {
+      await buscarGrupoRateio(String(rotuloComum));
+      return;
+    }
+    const total = valorTotalReferenciaRateio();
+    const n = candidatos.length || 1;
+    const sugestao = total !== null ? String(Math.round((total / n) * 100) / 100) : '';
+    const membros = candidatos.map((c) =>
+      membroVazio({
+        codigo: String(c.codigo),
+        inscricaoIptu: c.inscricaoIptu || '',
+        dati: c.dati || '',
+        proprietario: c.proprietario || '',
+        nominalIptu: c.nominalIptu || '',
+        obs: c.obs || '',
+        cotaUnica: item.formaPgto === 'Cota única' ? sugestao : '',
+        parcela: item.formaPgto === 'Parcelado' ? sugestao : '',
+        existente: true,
+      })
+    );
+    setItem((prev) => ({ ...prev, rateioMembros: membros }));
+  }
+
   async function confirmarRateio() {
     setError('');
     setLoading(true);
@@ -860,8 +891,12 @@ export default function Upload() {
               <div className="card destaque">
                 <p className="meta">
                   A inscrição <strong>{inscricaoDetectada}</strong> lida do carnê aparece em{' '}
-                  {imoveisPorInscricao.length} linhas da planilha (imóvel de rateio) — escolha qual:
+                  {imoveisPorInscricao.length} linhas da planilha — isso é normalmente um imóvel de rateio.
                 </p>
+                <button onClick={() => usarModoRateioComCandidatos(imoveisPorInscricao)}>
+                  Lançar dividindo entre essas linhas (rateio)
+                </button>
+                <p className="meta">Ou, se for só uma dessas linhas mesmo (sem dividir), escolha qual:</p>
                 <ul className="resumo-list">
                   {imoveisPorInscricao.map((op) => (
                     <li key={op.codigo}>
