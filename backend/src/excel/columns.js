@@ -30,7 +30,18 @@ const COLUMNS = {
   obs: 'Y',
   // Z = Chave busca (fórmula)
   // AA = Ordem busca (fórmula)
+  // AB/AC: adicionadas pelo app (ver excelStore.ensureColunasProvisao) -
+  // não existiam na planilha original do usuário.
+  iptuProvisaoProximoAno: 'AB',
+  datiProvisaoProximoAno: 'AC',
 };
+
+// Nome (header) de cada coluna que o app pode precisar criar sozinho na
+// tabela, caso ainda não exista - ver excelStore.ensureColunasProvisao.
+const COLUNAS_OPCIONAIS = [
+  { field: 'iptuProvisaoProximoAno', nome: 'IPTU provisão próx. exercício' },
+  { field: 'datiProvisaoProximoAno', nome: 'DATI provisão próx. exercício' },
+];
 
 const FORMULA_COLUMNS = { contaNoTotal: 'I', iptuTotal: 'M', datiTotal: 'Q', valorAPagar: 'R', chaveBusca: 'Z', ordemBusca: 'AA' };
 
@@ -49,4 +60,4 @@ const FORMULA_TEMPLATES = {
     `IF(AND(Painel!$C$5<>"",ISNUMBER(SEARCH(Painel!$C$5,$Z${r}))),COUNT($AA$1:AA${rm1})+1,"")`,
 };
 
-module.exports = { COLUMNS, FORMULA_COLUMNS, FORMULA_TEMPLATES };
+module.exports = { COLUMNS, FORMULA_COLUMNS, FORMULA_TEMPLATES, COLUNAS_OPCIONAIS };

@@ -30,7 +30,17 @@ function itemVazio() {
     quemPaga: '',
     obs: '',
     escolhendoCotaUnica: false,
+    reajustePct: '',
   };
+}
+
+function valorTotalDoItem(item, nParcelas) {
+  if (item.formaPgto === 'Cota única') {
+    return item.cotaUnica === '' ? null : Number(item.cotaUnica);
+  }
+  if (item.parcela === '') return null;
+  const ultima = item.ultimaParcela === '' ? item.parcela : item.ultimaParcela;
+  return Number(item.parcela) * ((nParcelas || 1) - 1) + Number(ultima);
 }
 
 export default function Upload() {
@@ -129,6 +139,8 @@ export default function Upload() {
       return;
     }
 
+    base.reajustePct = String(config?.reajustePadrao ?? 5);
+
     const codigoSugerido = entrada.extracao.codigoSugerido;
     if (codigoSugerido) {
       base = await prefillPorCodigo(codigoSugerido, base);
@@ -201,6 +213,7 @@ export default function Upload() {
       if (item.tributo === 'DATI') form.append('dati', item.dati);
       form.append('quemPaga', item.quemPaga);
       form.append('obs', item.obs);
+      if (item.reajustePct !== '') form.append('reajustePct', item.reajustePct);
 
       if (item.formaPgto === 'Cota única') {
         form.append('cotaUnica', item.cotaUnica);
@@ -214,7 +227,13 @@ export default function Upload() {
       });
       setResultados((prev) => [
         ...prev,
-        { arquivo: arquivo.name, codigo: data.codigo, status: 'sucesso', criado: data.created },
+        {
+          arquivo: arquivo.name,
+          codigo: data.codigo,
+          status: 'sucesso',
+          criado: data.created,
+          diferenca: data.diferenca,
+        },
       ]);
       await abrirItem(fila, indice + 1);
     } catch (err) {
@@ -281,6 +300,9 @@ export default function Upload() {
                   <>
                     ✓ {r.arquivo} — código <strong>{r.codigo}</strong>
                     {r.criado ? ' (linha nova)' : ''}
+                    {r.diferenca !== null && r.diferenca !== undefined && (
+                      <> — diferença a lançar: {formatarMoeda(r.diferenca)}</>
+                    )}
                   </>
                 ) : (
                   <>✗ {r.arquivo} — {r.mensagem}</>
@@ -394,16 +416,38 @@ export default function Upload() {
               {config?.listas?.nParcelas && (
                 <p className="meta">
                   Total calculado ({config.listas.nParcelas}x):{' '}
-                  {formatarMoeda(
-                    item.parcela === ''
-                      ? null
-                      : Number(item.parcela) * (config.listas.nParcelas - 1) +
-                          Number(item.ultimaParcela === '' ? item.parcela : item.ultimaParcela)
-                  )}
+                  {formatarMoeda(valorTotalDoItem(item, config.listas.nParcelas))}
                 </p>
               )}
             </>
           )}
+
+          {valoresValidos() && (
+            <div className="card destaque">
+              <label>
+                % de reajuste estimado pro próximo exercício
+                <input
+                  type="number"
+                  step="0.1"
+                  value={item.reajustePct}
+                  onChange={(e) => atualizarItem({ reajustePct: e.target.value })}
+                />
+              </label>
+              <p className="meta">
+                Valor com reajuste (provisório):{' '}
+                <strong>
+                  {formatarMoeda(
+                    (() => {
+                      const total = valorTotalDoItem(item, config?.listas?.nParcelas || 1);
+                      const pct = Number(item.reajustePct);
+                      return total === null || isNaN(pct) ? null : total * (1 + pct / 100);
+                    })()
+                  )}
+                </strong>
+              </p>
+            </div>
+          )}
+
           <div className="actions-row">
             <button className="link-btn" onClick={() => setStep(1)}>
               ← Voltar
@@ -516,6 +560,28 @@ export default function Upload() {
               )}
             </li>
           </ul>
+
+          {(() => {
+            const provisaoAnterior =
+              item.tributo === 'IPTU'
+                ? item.imovelEncontrado?.iptuProvisaoProximoAno
+                : item.imovelEncontrado?.datiProvisaoProximoAno;
+            if (provisaoAnterior === null || provisaoAnterior === undefined) return null;
+            const total = valorTotalDoItem(item, config?.listas?.nParcelas || 1);
+            const diferenca = total === null ? null : total - provisaoAnterior;
+            return (
+              <div className="card destaque">
+                <p className="meta">Já havia uma provisão de um lançamento anterior pra este imóvel:</p>
+                <ul className="resumo-list">
+                  <li>Provisionado: {formatarMoeda(provisaoAnterior)}</li>
+                  <li>Valor real agora: {formatarMoeda(total)}</li>
+                  <li>
+                    <strong>Diferença a lançar: {formatarMoeda(diferenca)}</strong>
+                  </li>
+                </ul>
+              </div>
+            );
+          })()}
 
           <div className="actions-row">
             <button className="link-btn" onClick={() => setStep(3)} disabled={loading}>

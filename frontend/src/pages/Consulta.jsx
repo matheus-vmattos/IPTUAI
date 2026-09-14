@@ -17,9 +17,11 @@ const CAMPOS_EDITAVEIS = [
   'iptuCotaUnica',
   'iptuParcela',
   'iptuUltimaParcela',
+  'iptuProvisaoProximoAno',
   'datiCotaUnica',
   'datiParcela',
   'datiUltimaParcela',
+  'datiProvisaoProximoAno',
   'imovelDeRateio',
   'obs',
 ];
@@ -182,6 +184,9 @@ export default function Consulta() {
               <li>Cota única: {formatarMoeda(imovel.iptuCotaUnica)}</li>
               <li>Parcela: {formatarMoeda(imovel.iptuParcela)} {imovel.iptuUltimaParcela ? `(última: ${formatarMoeda(imovel.iptuUltimaParcela)})` : ''}</li>
               <li>Total: {formatarMoeda(imovel.iptuTotalCalculado)}</li>
+              {imovel.iptuProvisaoProximoAno != null && (
+                <li>Provisão próx. exercício: {formatarMoeda(imovel.iptuProvisaoProximoAno)}</li>
+              )}
               <li>
                 Lançado no sistema: <strong>{imovel.iptuLancado || 'Não'}</strong>{' '}
                 {imovel.iptuLancado !== 'Feito' && (
@@ -201,6 +206,9 @@ export default function Consulta() {
               <li>Cota única: {formatarMoeda(imovel.datiCotaUnica)}</li>
               <li>Parcela: {formatarMoeda(imovel.datiParcela)} {imovel.datiUltimaParcela ? `(última: ${formatarMoeda(imovel.datiUltimaParcela)})` : ''}</li>
               <li>Total: {formatarMoeda(imovel.datiTotalCalculado)}</li>
+              {imovel.datiProvisaoProximoAno != null && (
+                <li>Provisão próx. exercício: {formatarMoeda(imovel.datiProvisaoProximoAno)}</li>
+              )}
               <li>
                 Lançado no sistema: <strong>{imovel.datiLancado || 'Não'}</strong>{' '}
                 {imovel.datiLancado !== 'Feito' && (
@@ -285,6 +293,10 @@ export default function Consulta() {
               Última parcela (R$)
               <input type="number" step="0.01" value={form.iptuUltimaParcela} onChange={(e) => atualizarCampo('iptuUltimaParcela', e.target.value)} />
             </label>
+            <label>
+              Provisão próx. exercício (R$)
+              <input type="number" step="0.01" value={form.iptuProvisaoProximoAno} onChange={(e) => atualizarCampo('iptuProvisaoProximoAno', e.target.value)} />
+            </label>
           </div>
 
           <div className="card">
@@ -311,6 +323,10 @@ export default function Consulta() {
             <label>
               Última parcela (R$)
               <input type="number" step="0.01" value={form.datiUltimaParcela} onChange={(e) => atualizarCampo('datiUltimaParcela', e.target.value)} />
+            </label>
+            <label>
+              Provisão próx. exercício (R$)
+              <input type="number" step="0.01" value={form.datiProvisaoProximoAno} onChange={(e) => atualizarCampo('datiProvisaoProximoAno', e.target.value)} />
             </label>
           </div>
 

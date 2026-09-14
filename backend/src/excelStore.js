@@ -3,9 +3,10 @@
 // porque de editar o XML na mao em vez de usar uma lib xlsx generica.
 const fs = require('fs/promises');
 const path = require('path');
+const crypto = require('crypto');
 const JSZip = require('jszip');
 
-const { colLetterToNum, escapeXml } = require('./excel/xmlUtil');
+const { colLetterToNum, numToColLetter, escapeXml } = require('./excel/xmlUtil');
 const {
   parseSharedStrings,
   indexRows,
@@ -15,7 +16,7 @@ const {
   setCellsInRow,
   clearCellsInRow,
 } = require('./excel/sheetEditor');
-const { COLUMNS, FORMULA_COLUMNS, FORMULA_TEMPLATES } = require('./excel/columns');
+const { COLUMNS, FORMULA_COLUMNS, FORMULA_TEMPLATES, COLUNAS_OPCIONAIS } = require('./excel/columns');
 
 const CONFIG_PATH = process.env.CONFIG_PATH || path.join(__dirname, '..', 'data', 'config.json');
 
@@ -24,12 +25,14 @@ const LISTAS_PATH = 'xl/worksheets/sheet3.xml'; // aba "Listas"
 const SHARED_STRINGS_PATH = 'xl/sharedStrings.xml';
 const TABLE_PATH = 'xl/tables/table1.xml';
 
+const CONFIG_PADRAO = { xlsxPath: null, pdfFolder: null, reajustePadrao: 5 };
+
 async function readConfig() {
   try {
     const raw = await fs.readFile(CONFIG_PATH, 'utf-8');
-    return { xlsxPath: null, pdfFolder: null, ...JSON.parse(raw) };
+    return { ...CONFIG_PADRAO, ...JSON.parse(raw) };
   } catch {
-    return { xlsxPath: null, pdfFolder: null };
+    return { ...CONFIG_PADRAO };
   }
 }
 
@@ -139,7 +142,10 @@ function buildNewRowXml(rowNum, dataUpdates) {
 }
 
 function updateDimension(sheetXml, newMaxRow) {
-  return sheetXml.replace(/<dimension ref="A1:[A-Z]+\d+"\/>/, `<dimension ref="A1:AA${newMaxRow}"/>`);
+  return sheetXml.replace(
+    /<dimension ref="A1:([A-Z]+)\d+"\/>/,
+    (m, ultimaCol) => `<dimension ref="A1:${ultimaCol}${newMaxRow}"/>`
+  );
 }
 
 async function loadListasRaw(zip) {
@@ -253,6 +259,80 @@ async function getImovel(codigo) {
   return { ...fields, iptuTotalCalculado, datiTotalCalculado, valorAPagarCalculado };
 }
 
+function novoGuid() {
+  return `{${crypto.randomUUID().toUpperCase()}}`;
+}
+
+// Migracao idempotente: adiciona ao final da tabela tblIPTU as colunas
+// opcionais que o app precisa e que a planilha original do usuario nao
+// tinha (hoje: provisao de IPTU/DATI pro proximo exercicio). So mexe em
+// table1.xml (novas tableColumn + count + ref/autoFilter) e na linha 1 do
+// sheet2.xml (cabecalho) + dimension - nenhuma outra linha ou coluna e
+// tocada. Se as colunas ja existirem (nome do cabecalho ja presente na
+// tabela), nao faz nada.
+function ensureColunasProvisao(sheetXml, tableXml) {
+  const faltando = COLUNAS_OPCIONAIS.filter(({ nome }) => !tableXml.includes(`name="${nome}"`));
+  if (faltando.length === 0) return { sheetXml, tableXml, criada: false };
+
+  const idsExistentes = [...tableXml.matchAll(/<tableColumn id="(\d+)"/g)].map((m) => Number(m[1]));
+  let proximoId = Math.max(...idsExistentes) + 1;
+
+  const refMatch = tableXml.match(/ref="A1:([A-Z]+)(\d+)"/);
+  if (!refMatch) throw new Error('Não foi possível ler o intervalo da tabela tblIPTU');
+  const ultimaLinha = refMatch[2];
+  let ultimoColNum = colLetterToNum(refMatch[1]);
+
+  const novasColunasXml = [];
+  const novasLetras = [];
+  for (const { nome } of faltando) {
+    ultimoColNum += 1;
+    const letra = numToColLetter(ultimoColNum);
+    novasLetras.push(letra);
+    novasColunasXml.push(`<tableColumn id="${proximoId}" xr3:uid="${novoGuid()}" name="${escapeXml(nome)}"/>`);
+    proximoId += 1;
+  }
+
+  // Confere que as letras calculadas dinamicamente batem com o mapeamento
+  // fixo em columns.js - se nao bater, a planilha esta num estado
+  // inesperado e e mais seguro parar do que gravar na coluna errada.
+  const letrasEsperadas = faltando.map(({ field }) => COLUMNS[field]);
+  if (novasLetras.join(',') !== letrasEsperadas.join(',')) {
+    throw new Error(
+      `Não foi possível adicionar as colunas de provisão automaticamente ` +
+        `(esperava ${letrasEsperadas.join('/')}, calculou ${novasLetras.join('/')}). ` +
+        `A planilha pode ter sido editada manualmente - avise o suporte antes de continuar.`
+    );
+  }
+
+  const novaUltimaCol = numToColLetter(ultimoColNum);
+  const novoCount = idsExistentes.length + faltando.length;
+
+  const novoTableXml = tableXml
+    .replace(/count="\d+"/, `count="${novoCount}"`)
+    .replace('</tableColumns>', `${novasColunasXml.join('')}</tableColumns>`)
+    .replace(/A1:[A-Z]+\d+/g, `A1:${novaUltimaCol}${ultimaLinha}`);
+
+  const { rows } = indexRows(sheetXml);
+  const linha1 = rows.get(1);
+  if (!linha1) throw new Error('Linha de cabeçalho não encontrada na aba IPTU');
+
+  const novasCelulasHeader = faltando
+    .map(({ nome }, i) => {
+      const texto = escapeXml(nome);
+      return `<c r="${novasLetras[i]}1" s="26" t="inlineStr"><is><t xml:space="preserve">${texto}</t></is></c>`;
+    })
+    .join('');
+  const novaLinha1 = linha1.xml.replace('</row>', `${novasCelulasHeader}</row>`);
+
+  let novoSheetXml = sheetXml.slice(0, linha1.start) + novaLinha1 + sheetXml.slice(linha1.end);
+  novoSheetXml = novoSheetXml.replace(
+    /<dimension ref="A1:[A-Z]+\d+"\/>/,
+    `<dimension ref="A1:${novaUltimaCol}${ultimaLinha}"/>`
+  );
+
+  return { sheetXml: novoSheetXml, tableXml: novoTableXml, criada: true };
+}
+
 // tributo: 'IPTU' | 'DATI'
 async function lancarTributo(payload) {
   const { codigo, tributo } = payload;
@@ -266,10 +346,21 @@ async function lancarTributo(payload) {
   return withWriteLock(async () => {
     const xlsxPath = await requireXlsxPath();
     const zip = await loadZip(xlsxPath);
-    const sheetXml = await zip.file(SHEET_PATH).async('string');
+    let sheetXml = await zip.file(SHEET_PATH).async('string');
+    let tableXml = await zip.file(TABLE_PATH).async('string');
+
+    // Garante que as colunas de provisao existem ANTES de indexar as linhas
+    // - se a migracao mexer na linha 1 (cabecalho), os offsets das linhas
+    // 2+ calculados a partir do sheetXml original ficariam invalidos.
+    const migracao = ensureColunasProvisao(sheetXml, tableXml);
+    sheetXml = migracao.sheetXml;
+    tableXml = migracao.tableXml;
+
     const sharedStringsXml = await zip.file(SHARED_STRINGS_PATH).async('string');
     const sharedStrings = parseSharedStrings(sharedStringsXml);
     const { rows, maxRow } = indexRows(sheetXml);
+    const { cellAt } = await loadListasRaw(zip);
+    const nParcelas = Number(cellAt(5, 'B')) || 12;
 
     const existingRowNum = findRowByCodigo(rows, sharedStrings, codigo);
 
@@ -285,6 +376,35 @@ async function lancarTributo(payload) {
     setIfDefined('imovelDeRateio', payload.imovelDeRateio);
     setIfDefined('formaPgto', payload.formaPgto);
     setIfDefined('linkCarne', payload.linkCarne);
+
+    // Provisao pro proximo exercicio: se um % de reajuste foi informado,
+    // calcula o valor total deste lancamento e grava valorTotal*(1+%) na
+    // coluna de provisao do tributo - vira o "valor esperado" a comparar
+    // no proximo ciclo. Se ja existia uma provisao de um lancamento
+    // anterior (ciclo passado), devolve a diferenca pro valor real de agora.
+    const campoProvisao = tributo === 'IPTU' ? 'iptuProvisaoProximoAno' : 'datiProvisaoProximoAno';
+    let provisaoAnterior = null;
+    if (existingRowNum) {
+      const antesDoUpdate = fieldsOfRow(rows.get(existingRowNum).xml, sharedStrings);
+      const valor = antesDoUpdate[campoProvisao];
+      provisaoAnterior = valor === null || valor === undefined || valor === '' ? null : Number(valor);
+    }
+
+    let valorTotalDesteAno = null;
+    if (payload.formaPgto === 'Cota única') {
+      valorTotalDesteAno = payload.cotaUnica !== undefined ? Number(payload.cotaUnica) : null;
+    } else if (payload.formaPgto === 'Parcelado') {
+      valorTotalDesteAno = calcTotal(payload.parcela, payload.ultimaParcela, nParcelas);
+    }
+
+    let diferenca = null;
+    if (payload.reajustePct !== undefined && payload.reajustePct !== null && valorTotalDesteAno !== null) {
+      const pct = Number(payload.reajustePct);
+      dataUpdates[campoProvisao] = Math.round(valorTotalDesteAno * (1 + pct / 100) * 100) / 100;
+    }
+    if (provisaoAnterior !== null && valorTotalDesteAno !== null) {
+      diferenca = Math.round((valorTotalDesteAno - provisaoAnterior) * 100) / 100;
+    }
 
     if (tributo === 'IPTU') {
       setIfDefined('quemPagaIptu', payload.quemPaga);
@@ -322,13 +442,22 @@ async function lancarTributo(payload) {
     zip.file(SHEET_PATH, newSheetXml);
 
     if (created) {
-      const tableXml = await zip.file(TABLE_PATH).async('string');
-      zip.file(TABLE_PATH, tableXml.replace(/A1:AA\d+/g, `A1:AA${rowNum}`));
+      const novoTableXml = tableXml.replace(/A1:([A-Z]+)\d+/g, (m, ultimaCol) => `A1:${ultimaCol}${rowNum}`);
+      zip.file(TABLE_PATH, novoTableXml);
+    } else if (migracao.criada) {
+      zip.file(TABLE_PATH, tableXml);
     }
 
     await saveZipAtomically(zip, xlsxPath);
 
-    return { codigo: String(codigo).trim(), rowNum, created };
+    return {
+      codigo: String(codigo).trim(),
+      rowNum,
+      created,
+      provisaoAnterior,
+      valorTotalDesteAno,
+      diferenca,
+    };
   });
 }
 
@@ -364,6 +493,8 @@ const CAMPOS_NUMERICOS = new Set([
   'datiCotaUnica',
   'datiParcela',
   'datiUltimaParcela',
+  'iptuProvisaoProximoAno',
+  'datiProvisaoProximoAno',
 ]);
 
 // Edicao livre de um imovel ja existente: aceita qualquer subconjunto dos
@@ -390,7 +521,16 @@ async function atualizarImovel(codigo, camposLivres) {
   return withWriteLock(async () => {
     const xlsxPath = await requireXlsxPath();
     const zip = await loadZip(xlsxPath);
-    const sheetXml = await zip.file(SHEET_PATH).async('string');
+    let sheetXml = await zip.file(SHEET_PATH).async('string');
+    let tableXml = await zip.file(TABLE_PATH).async('string');
+
+    // Garante as colunas opcionais (ex: provisao) antes de indexar linhas,
+    // caso a edicao livre mexa nelas antes de qualquer lancamento ter
+    // rodado a migracao.
+    const migracao = ensureColunasProvisao(sheetXml, tableXml);
+    sheetXml = migracao.sheetXml;
+    tableXml = migracao.tableXml;
+
     const sharedStringsXml = await zip.file(SHARED_STRINGS_PATH).async('string');
     const sharedStrings = parseSharedStrings(sharedStringsXml);
     const { rows } = indexRows(sheetXml);
@@ -403,6 +543,7 @@ async function atualizarImovel(codigo, camposLivres) {
     const newSheetXml = sheetXml.slice(0, info.start) + newRowXml + sheetXml.slice(info.end);
 
     zip.file(SHEET_PATH, newSheetXml);
+    if (migracao.criada) zip.file(TABLE_PATH, tableXml);
     await saveZipAtomically(zip, xlsxPath);
     return { codigo, rowNum };
   });
@@ -587,4 +728,5 @@ module.exports = {
   iniciarNovoExercicio,
   listarProprietarios,
   getResumoProprietario,
+  ensureColunasProvisao,
 };

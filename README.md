@@ -86,6 +86,12 @@ instalar assim que a atualização estiver pronta.
    carnê, inscrições, rateio e OBS — assim não precisa recadastrar nada
    que não muda de ano pra ano. Faz backup automático do arquivo antes de
    limpar.
+8. **Provisão pro próximo exercício**: ao lançar um carnê, o app calcula e
+   guarda automaticamente uma estimativa com reajuste (% padrão em
+   Configurações, editável a cada lançamento) — é o valor a provisionar no
+   seu sistema contábil. No ano seguinte, ao lançar o carnê real daquele
+   mesmo imóvel, o app mostra sozinho a diferença entre o que foi
+   provisionado e o valor real, sem precisar guardar isso em outro lugar.
 
 ## Extração automática de valores
 

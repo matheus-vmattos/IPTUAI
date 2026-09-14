@@ -30,6 +30,8 @@ export default function Config() {
   const [versaoApp, setVersaoApp] = useState('');
   const [statusAtualizacao, setStatusAtualizacao] = useState(null);
 
+  const [reajuste, setReajuste] = useState('');
+
   const [viradaAberta, setViradaAberta] = useState(false);
   const [novoAno, setNovoAno] = useState('');
   const [confirmado, setConfirmado] = useState(false);
@@ -40,6 +42,7 @@ export default function Config() {
     try {
       const { data } = await api.get('/config');
       setConfig(data);
+      setReajuste(String(data.reajustePadrao ?? 5));
     } catch (err) {
       setError(apiErrorMessage(err));
     }
@@ -110,6 +113,11 @@ export default function Config() {
     } finally {
       setVirando(false);
     }
+  }
+
+  async function salvarReajuste(e) {
+    e.preventDefault();
+    await salvar({ reajustePadrao: Number(reajuste) });
   }
 
   async function escolherPasta() {
@@ -198,6 +206,22 @@ export default function Config() {
           )}
         </section>
       )}
+
+      <section className="card">
+        <h3>Provisão do próximo exercício</h3>
+        <p className="meta">
+          A cada lançamento, o app pode calcular e guardar uma estimativa pro próximo ano (valor
+          deste ano × reajuste) — e, no ano seguinte, mostrar a diferença entre o que foi
+          provisionado e o valor real do carnê. Este é o % usado por padrão (dá pra mudar em cada
+          lançamento).
+        </p>
+        <form className="inline-form" onSubmit={salvarReajuste}>
+          <input type="number" step="0.1" value={reajuste} onChange={(e) => setReajuste(e.target.value)} />
+          <button type="submit" disabled={loading}>
+            Salvar
+          </button>
+        </form>
+      </section>
 
       <section className="card">
         <h3>Pasta para salvar os carnês (PDF)</h3>

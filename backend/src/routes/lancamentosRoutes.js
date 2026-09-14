@@ -95,6 +95,12 @@ router.post(
       imovelDeRateio: body.imovelDeRateio || undefined,
     };
 
+    if (body.reajustePct !== undefined && body.reajustePct !== '') {
+      const pct = Number(body.reajustePct);
+      if (Number.isNaN(pct)) return res.status(400).json({ error: '% de reajuste inválido' });
+      payload.reajustePct = pct;
+    }
+
     if (formaPgto === 'Cota única') {
       const valor = Number(body.cotaUnica);
       if (!body.cotaUnica || Number.isNaN(valor)) {

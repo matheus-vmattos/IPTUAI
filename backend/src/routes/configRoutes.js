@@ -35,10 +35,11 @@ router.get(
 router.put(
   '/',
   asyncHandler(async (req, res) => {
-    const { xlsxPath, pdfFolder } = req.body;
+    const { xlsxPath, pdfFolder, reajustePadrao } = req.body;
     const updates = {};
     if (xlsxPath !== undefined) updates.xlsxPath = xlsxPath;
     if (pdfFolder !== undefined) updates.pdfFolder = pdfFolder;
+    if (reajustePadrao !== undefined) updates.reajustePadrao = Number(reajustePadrao);
 
     const config = await excelStore.writeConfig(updates);
 
