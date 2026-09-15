@@ -81,6 +81,10 @@ export default function Proprietarios() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const [renomeando, setRenomeando] = useState(false);
+  const [novoNome, setNovoNome] = useState('');
+  const [salvandoRenome, setSalvandoRenome] = useState(false);
+
   async function buscar(e) {
     e?.preventDefault();
     if (!busca.trim()) return;
@@ -108,6 +112,35 @@ export default function Proprietarios() {
       setError(apiErrorMessage(err));
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Renomeia o proprietario em TODOS os imoveis dele de uma vez (ex: imovel
+  // vendido pra outra pessoa) - o nome antigo some da lista de
+  // proprietarios assim que nenhuma linha mais aponta pra ele.
+  async function confirmarRenomeacao(e) {
+    e.preventDefault();
+    if (!novoNome.trim() || !resumo) return;
+    if (
+      !window.confirm(
+        `Renomear "${resumo.proprietario}" para "${novoNome.trim()}" em todos os ${resumo.totalImoveis} imóveis?`
+      )
+    ) {
+      return;
+    }
+    setError('');
+    setSalvandoRenome(true);
+    try {
+      await api.patch(`/proprietarios/${encodeURIComponent(resumo.proprietario)}`, { novoNome: novoNome.trim() });
+      const nomeAtualizado = novoNome.trim();
+      setRenomeando(false);
+      setNovoNome('');
+      setBusca(nomeAtualizado);
+      await abrirProprietario(nomeAtualizado);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setSalvandoRenome(false);
     }
   }
 
@@ -160,10 +193,39 @@ export default function Proprietarios() {
         <div className="resultado">
           <div className="iptu-header">
             <h3>{resumo.proprietario}</h3>
-            <button className="link-btn" onClick={gerarPdf}>
-              Gerar PDF
-            </button>
+            <div>
+              <button
+                className="link-btn"
+                onClick={() => {
+                  setRenomeando((v) => !v);
+                  setNovoNome('');
+                }}
+              >
+                {renomeando ? 'Cancelar' : 'Renomear (imóvel mudou de dono)'}
+              </button>{' '}
+              <button className="link-btn" onClick={gerarPdf}>
+                Gerar PDF
+              </button>
+            </div>
           </div>
+
+          {renomeando && (
+            <form className="card destaque" onSubmit={confirmarRenomeacao}>
+              <p className="meta">
+                Troca o proprietário em todos os {resumo.totalImoveis} imóveis de "{resumo.proprietario}" de uma vez —
+                útil quando o imóvel foi vendido. Não mexe em mais nada (inscrições, quem paga etc.).
+              </p>
+              <label>
+                Novo proprietário
+                <input value={novoNome} onChange={(e) => setNovoNome(e.target.value)} placeholder="Nome do novo dono" />
+              </label>
+              <div className="actions-row">
+                <button type="submit" disabled={!novoNome.trim() || salvandoRenome}>
+                  {salvandoRenome ? 'Salvando...' : `Aplicar a ${resumo.totalImoveis} imóve${resumo.totalImoveis === 1 ? 'l' : 'is'}`}
+                </button>
+              </div>
+            </form>
+          )}
 
           <div className="card destaque">
             <h4>Resumo</h4>

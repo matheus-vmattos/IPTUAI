@@ -112,6 +112,10 @@ instalar assim que a atualização estiver pronta.
    quantos códigos `I` compartilham a mesma inscrição (útil pra achar
    imóveis de rateio, onde uma inscrição é dividida em várias linhas). O
    botão **"Gerar PDF"** exporta um resumo enxuto pra imprimir ou enviar.
+   O botão **"Renomear (imóvel mudou de dono)"** troca o proprietário em
+   todos os imóveis dele de uma vez (útil quando o imóvel foi vendido) —
+   não mexe em mais nada (inscrições, quem paga etc. continuam como
+   estavam).
 7. **Virada de exercício** (em Configurações): quando começar um ano novo,
    limpa de uma vez os valores/status/quem paga/forma de pagamento
    lançados de **todos os imóveis**, mantendo proprietário, nome no

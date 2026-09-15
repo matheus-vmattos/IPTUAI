@@ -1044,6 +1044,49 @@ async function getResumoProprietario(nome) {
   };
 }
 
+// Renomeia o proprietario em TODAS as linhas atualmente atribuidas a ele
+// (comparacao exata, sem diferenciar maiusculas - mesma regra usada pra
+// achar o resumo) - util quando o imovel muda de dono e as linhas antigas
+// nao devem ficar apontando pro proprietario errado. Nao mexe em mais
+// nenhum campo (inscricoes, quem paga etc continuam como estavam).
+async function renomearProprietario(nomeAtual, nomeNovo) {
+  const novo = String(nomeNovo ?? '').trim();
+  if (!novo) throw new Error('Informe o novo nome do proprietário');
+
+  return withWriteLock(async () => {
+    const xlsxPath = await requireXlsxPath();
+    const zip = await loadZip(xlsxPath);
+    const sheetXml = await zip.file(SHEET_PATH).async('string');
+    const sharedStringsXml = await zip.file(SHARED_STRINGS_PATH).async('string');
+    const sharedStrings = parseSharedStrings(sharedStringsXml);
+    const { rows, maxRow } = indexRows(sheetXml);
+
+    const alvo = String(nomeAtual ?? '').trim().toLowerCase();
+    let novoSheetXml = sheetXml;
+    let renomeados = 0;
+
+    // De tras pra frente: cada substituicao usa start/end calculados sobre
+    // o sheetXml original, que ficam invalidos pras linhas seguintes assim
+    // que uma linha anterior muda de tamanho.
+    for (let r = maxRow; r >= 2; r--) {
+      const info = rows.get(r);
+      if (!info) continue;
+      const fields = fieldsOfRow(info.xml, sharedStrings);
+      if (!fields.proprietario || fields.proprietario.trim().toLowerCase() !== alvo) continue;
+
+      const newRowXml = setCellsInRow(info.xml, r, mapFieldsToColumns({ proprietario: novo }));
+      novoSheetXml = novoSheetXml.slice(0, info.start) + newRowXml + novoSheetXml.slice(info.end);
+      renomeados += 1;
+    }
+
+    if (renomeados === 0) throw new Error(`Nenhum imóvel encontrado com proprietário "${nomeAtual}"`);
+
+    zip.file(SHEET_PATH, novoSheetXml);
+    await saveZipAtomically(zip, xlsxPath);
+    return { renomeados, novoNome: novo };
+  });
+}
+
 module.exports = {
   readConfig,
   writeConfig,
@@ -1057,6 +1100,7 @@ module.exports = {
   iniciarNovoExercicio,
   listarProprietarios,
   getResumoProprietario,
+  renomearProprietario,
   ensureColunasProvisao,
   listarGruposDeRateio,
   getGrupoDeRateio,

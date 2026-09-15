@@ -21,4 +21,18 @@ router.get(
   })
 );
 
+// Renomeia o proprietario em todas as linhas dele de uma vez (ex: imovel
+// mudou de dono) - body: { novoNome }.
+router.patch(
+  '/:nome',
+  asyncHandler(async (req, res) => {
+    const { novoNome } = req.body || {};
+    if (!novoNome || !String(novoNome).trim()) {
+      return res.status(400).json({ error: 'Informe o novo nome do proprietário' });
+    }
+    const resultado = await excelStore.renomearProprietario(req.params.nome, novoNome);
+    res.json(resultado);
+  })
+);
+
 module.exports = router;
