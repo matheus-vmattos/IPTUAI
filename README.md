@@ -105,7 +105,14 @@ instalar assim que a atualização estiver pronta.
    consolidado a lançar, com um botão pra **remover uma linha do grupo**
    (não mexe nos valores já lançados, só tira o rótulo). Pra ajustar a
    divisão ou trocar o carnê, é só lançar de novo em "Lançar" informando
-   o mesmo número de rateio.
+   o mesmo número de rateio. O botão **"Excluir imóvel"** limpa todos os
+   campos daquela linha (útil pra linha duplicada/errada, ex: uma linha
+   órfã de antes do app existir, sem código "I", duplicando uma inscrição
+   de outra linha) — não remove a linha fisicamente da tabela (evita ter
+   que renumerar linha por linha as fórmulas da planilha), só apaga o
+   conteúdo, e faz backup automático do arquivo antes. Uma linha sem
+   código aparece na busca como "(sem código)" e ainda pode ser aberta e
+   editada/excluída normalmente.
 6. **Proprietários**: painel com o resumo de todos os imóveis de um
    proprietário — quantos IPTUs, valor total (cota única e parcelado),
    quantos cada forma de pagamento ("Valoriza paga", repassado etc.) e

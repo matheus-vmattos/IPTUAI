@@ -121,11 +121,42 @@ function linhaSemInscricaoCadastrada(f) {
   return !normalizarInscricao(f.inscricaoIptu) && !normalizarInscricao(f.dati);
 }
 
-function localizarLinha(rows, sharedStrings, codigo, inscricao) {
-  const linhas = linhasComCodigo(rows, sharedStrings, codigo);
-  if (linhas.length === 0) return { rowNum: null, ambiguo: false, candidatos: [] };
+// Linhas "orfas" (coluna A/codigo vazia) - normalmente erro de digitacao
+// manual de antes do app existir, ou uma linha ja excluida (ver
+// excluirImovel). So da pra achar uma dessas pela inscricao exata, nunca
+// pelo codigo (nao tem).
+function linhasSemCodigo(rows, sharedStrings) {
+  const out = [];
+  for (const [rowNum, info] of rows) {
+    const cells = parseCells(info.xml);
+    const aCell = cells.find((c) => c.col === 'A');
+    const val = aCell ? cellValue(aCell, sharedStrings) : null;
+    if (val === null || String(val).trim() === '') out.push(rowNum);
+  }
+  return out;
+}
 
+function localizarLinha(rows, sharedStrings, codigo, inscricao) {
   const alvo = inscricao ? normalizarInscricao(inscricao) : null;
+  const codigoTrim = codigo === null || codigo === undefined ? '' : String(codigo).trim();
+
+  // Sem codigo: so da pra achar a linha certa com a inscricao exata (sem
+  // ela, nao ha como saber qual das possiveis linhas orfas e a certa).
+  if (!codigoTrim) {
+    if (!alvo) return { rowNum: null, ambiguo: false, candidatos: [] };
+    const semCodigo = linhasSemCodigo(rows, sharedStrings);
+    const bateram = semCodigo.filter((r) => linhaTemInscricao(fieldsOfRow(rows.get(r).xml, sharedStrings), alvo));
+    if (bateram.length === 1) return { rowNum: bateram[0], ambiguo: false, candidatos: [] };
+    if (bateram.length === 0) return { rowNum: null, ambiguo: false, candidatos: [] };
+    return {
+      rowNum: null,
+      ambiguo: true,
+      candidatos: bateram.map((r) => fieldsOfRow(rows.get(r).xml, sharedStrings)),
+    };
+  }
+
+  const linhas = linhasComCodigo(rows, sharedStrings, codigoTrim);
+  if (linhas.length === 0) return { rowNum: null, ambiguo: false, candidatos: [] };
 
   if (linhas.length === 1) {
     if (!alvo) return { rowNum: linhas[0], ambiguo: false, candidatos: [] };
@@ -877,6 +908,41 @@ async function atualizarImovel(codigo, camposLivres, inscricaoDesambiguacao) {
   });
 }
 
+// Exclui um imovel. NAO remove fisicamente a linha da tabela (exigiria
+// renumerar todas as linhas seguintes e suas formulas - arriscado demais
+// numa planilha real em uso) - em vez disso limpa TODOS os campos de dado
+// da linha, deixando-a vazia (igual uma linha nunca preenchida; as formulas
+// de total simplesmente mostram "" pra uma linha sem inscricao). Faz backup
+// do arquivo antes, do mesmo jeito que a virada de exercicio.
+async function excluirImovel(codigo, inscricao) {
+  return withWriteLock(async () => {
+    const xlsxPath = await requireXlsxPath();
+
+    const dir = path.dirname(xlsxPath);
+    const ext = path.extname(xlsxPath);
+    const nomeBase = path.basename(xlsxPath, ext);
+    const backupPath = path.join(dir, `${nomeBase} - backup antes de excluir I${codigo}${ext}`);
+    await fs.copyFile(xlsxPath, backupPath);
+
+    const zip = await loadZip(xlsxPath);
+    const sheetXml = await zip.file(SHEET_PATH).async('string');
+    const sharedStringsXml = await zip.file(SHARED_STRINGS_PATH).async('string');
+    const sharedStrings = parseSharedStrings(sharedStringsXml);
+    const { rows } = indexRows(sheetXml);
+
+    const rowNum = localizarLinhaOuFalhar(rows, sharedStrings, codigo, inscricao);
+    if (!rowNum) throw new Error(`Imóvel com código "${codigo}" não encontrado na planilha`);
+
+    const info = rows.get(rowNum);
+    const newRowXml = clearCellsInRow(info.xml, Object.values(COLUMNS));
+    const newSheetXml = sheetXml.slice(0, info.start) + newRowXml + sheetXml.slice(info.end);
+
+    zip.file(SHEET_PATH, newSheetXml);
+    await saveZipAtomically(zip, xlsxPath);
+    return { codigo, rowNum, backupPath };
+  });
+}
+
 // Campos que dependem do exercicio corrente e devem ser limpos na virada de
 // ano - o resto (proprietario, nomes, inscricoes, rateio, OBS) e cadastral
 // e continua valendo pro ano novo.
@@ -1097,6 +1163,7 @@ module.exports = {
   lancarTributo,
   marcarLancado,
   atualizarImovel,
+  excluirImovel,
   iniciarNovoExercicio,
   listarProprietarios,
   getResumoProprietario,

@@ -32,6 +32,14 @@ const CAMPOS_EDITAVEIS = [
   'obs',
 ];
 
+// Express nao aceita um segmento de path vazio - linhas orfas (sem "I") usam
+// esse valor fixo no lugar do codigo ao montar a URL; o backend sabe
+// converter de volta (ver imoveisRoutes.js).
+const SEM_CODIGO = '_sem_codigo_';
+function codigoNaUrl(codigo) {
+  return codigo ? codigo : SEM_CODIGO;
+}
+
 function paraFormulario(imovel) {
   const out = {};
   for (const campo of CAMPOS_EDITAVEIS) {
@@ -114,7 +122,7 @@ export default function Consulta() {
     setLoading(true);
     setEditando(false);
     try {
-      const { data } = await api.get(`/imoveis/${encodeURIComponent(codigo)}`, {
+      const { data } = await api.get(`/imoveis/${encodeURIComponent(codigoNaUrl(codigo))}`, {
         params: inscricao ? { inscricao } : undefined,
       });
       setImovel(data);
@@ -128,7 +136,7 @@ export default function Consulta() {
   async function marcarLancado(tributo) {
     if (!imovel) return;
     try {
-      await api.patch(`/imoveis/${encodeURIComponent(imovel.codigo)}/lancado`, {
+      await api.patch(`/imoveis/${encodeURIComponent(codigoNaUrl(imovel.codigo))}/lancado`, {
         tributo,
         status: 'Feito',
         inscricao: imovel.inscricaoIptu || imovel.dati,
@@ -158,6 +166,33 @@ export default function Consulta() {
     }
   }
 
+  // Limpa todos os campos da linha (nao remove fisicamente - ver
+  // excelStore.excluirImovel) - util pra linhas duplicadas/erradas, tipo
+  // uma linha orfa com codigo vazio que ficou duplicando uma inscricao. O
+  // app faz backup do arquivo automaticamente antes.
+  async function excluirImovel() {
+    if (!imovel) return;
+    if (
+      !window.confirm(
+        `Excluir o imóvel I ${imovel.codigo || '(sem código)'} (${imovel.proprietario || 'sem proprietário'})? ` +
+          'Isso limpa todos os campos dessa linha na planilha. Um backup do arquivo é feito automaticamente antes.'
+      )
+    ) {
+      return;
+    }
+    setError('');
+    try {
+      await api.delete(`/imoveis/${encodeURIComponent(codigoNaUrl(imovel.codigo))}`, {
+        params: imovel.inscricaoIptu || imovel.dati ? { inscricao: imovel.inscricaoIptu || imovel.dati } : undefined,
+      });
+      setImovel(null);
+      setEditando(false);
+      await buscar();
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    }
+  }
+
   async function abrirCarne() {
     if (!imovel?.linkCarne) return;
     if (window.electronAPI?.abrirArquivo) {
@@ -182,7 +217,7 @@ export default function Consulta() {
     setSalvando(true);
     try {
       const inscricaoOriginal = imovel.inscricaoIptu || imovel.dati;
-      await api.patch(`/imoveis/${encodeURIComponent(imovel.codigo)}`, form, {
+      await api.patch(`/imoveis/${encodeURIComponent(codigoNaUrl(imovel.codigo))}`, form, {
         params: inscricaoOriginal ? { inscricao: inscricaoOriginal } : undefined,
       });
       setEditando(false);
@@ -263,7 +298,7 @@ export default function Consulta() {
                   className="choice-item"
                   onClick={() => abrirImovel(r.codigo, r.inscricaoIptu || r.dati)}
                 >
-                  <strong>I {r.codigo}</strong> — {r.proprietario} ({r.inscricaoIptu || 'sem inscrição'})
+                  <strong>I {r.codigo || '(sem código)'}</strong> — {r.proprietario} ({r.inscricaoIptu || 'sem inscrição'})
                 </button>
               </li>
             ))}
@@ -274,11 +309,16 @@ export default function Consulta() {
       {imovel && !editando && (
         <div className="resultado">
           <div className="iptu-header">
-            <h3>Imóvel I {imovel.codigo} — {imovel.proprietario}</h3>
+            <h3>Imóvel I {imovel.codigo || '(sem código)'} — {imovel.proprietario}</h3>
             {!modoLeitura && (
-              <button className="link-btn" onClick={iniciarEdicao}>
-                Editar
-              </button>
+              <div>
+                <button className="link-btn" onClick={iniciarEdicao}>
+                  Editar
+                </button>{' '}
+                <button className="link-btn link-btn-perigo" onClick={excluirImovel}>
+                  Excluir imóvel
+                </button>
+              </div>
             )}
           </div>
           {imovel.nominalIptu && (

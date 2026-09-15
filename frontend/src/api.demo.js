@@ -204,7 +204,17 @@ function candidatoShape(r) {
   };
 }
 
-function encontrarLinha(codigo, inscricao) {
+const SEM_CODIGO = '_sem_codigo_';
+
+function encontrarLinha(codigoParam, inscricao) {
+  const codigo = codigoParam === SEM_CODIGO ? '' : codigoParam;
+  if (!String(codigo).trim()) {
+    if (!inscricao) throw new ApiError(404, { error: 'Imóvel não encontrado' });
+    const orfas = DB.filter((r) => !String(r.codigo).trim() && (r.inscricaoIptu === inscricao || r.dati === inscricao));
+    if (orfas.length === 0) throw new ApiError(404, { error: 'Imóvel não encontrado' });
+    if (orfas.length === 1) return orfas[0];
+    throw new ApiError(409, { error: 'Mais de uma linha órfã com essa inscrição', candidatos: orfas.map(candidatoShape) });
+  }
   const linhas = DB.filter((r) => String(r.codigo) === String(codigo));
   if (linhas.length === 0) throw new ApiError(404, { error: 'Imóvel não encontrado' });
   if (linhas.length === 1) return linhas[0];
@@ -453,6 +463,11 @@ function handle(method, url, body, config) {
     Object.assign(row, body);
     return comTotais(row);
   }
+  if (method === 'DELETE' && parts[0] === 'imoveis' && parts.length === 2) {
+    const row = encontrarLinha(parts[1], params.inscricao);
+    Object.assign(row, linhaBase({}));
+    return { codigo: parts[1], backupPath: '(demonstração — nenhum backup real é criado)' };
+  }
   if (method === 'GET' && parts[0] === 'rateios' && parts.length === 1) {
     const map = new Map();
     for (const r of DB) {
@@ -584,4 +599,5 @@ export const api = {
   post: (url, body, config) => request('POST', url, body, config),
   patch: (url, body, config) => request('PATCH', url, body, config),
   put: (url, body, config) => request('PUT', url, body, config),
+  delete: (url, config) => request('DELETE', url, undefined, config),
 };

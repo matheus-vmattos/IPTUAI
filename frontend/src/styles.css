@@ -317,6 +317,10 @@ button:disabled {
   text-decoration: underline;
 }
 
+.link-btn-perigo {
+  color: var(--error);
+}
+
 .choice-row {
   display: flex;
   gap: 10px;

@@ -4,6 +4,16 @@ const asyncHandler = require('../asyncHandler');
 
 const router = express.Router();
 
+// Express nao aceita um segmento de path vazio em "/:codigo" - linhas orfas
+// (sem "I", coluna A vazia - normalmente erro de digitacao manual de antes
+// do app existir) usam esse valor fixo no lugar do codigo; o backend
+// converte de volta pra "" antes de chamar excelStore, que ja sabe achar
+// essas linhas pela inscricao exata (ver excelStore.localizarLinha).
+const SEM_CODIGO = '_sem_codigo_';
+function codigoDoParam(raw) {
+  return raw === SEM_CODIGO ? '' : raw;
+}
+
 router.get(
   '/',
   asyncHandler(async (req, res) => {
@@ -19,7 +29,7 @@ router.get(
 router.get(
   '/:codigo',
   asyncHandler(async (req, res) => {
-    const imovel = await excelStore.getImovel(req.params.codigo, req.query.inscricao);
+    const imovel = await excelStore.getImovel(codigoDoParam(req.params.codigo), req.query.inscricao);
     if (!imovel) return res.status(404).json({ error: 'Imóvel não encontrado na planilha' });
     res.json(imovel);
   })
@@ -37,7 +47,7 @@ router.get(
 router.patch(
   '/:codigo',
   asyncHandler(async (req, res) => {
-    const resultado = await excelStore.atualizarImovel(req.params.codigo, req.body || {}, req.query.inscricao);
+    const resultado = await excelStore.atualizarImovel(codigoDoParam(req.params.codigo), req.body || {}, req.query.inscricao);
     res.json(resultado);
   })
 );
@@ -50,11 +60,23 @@ router.patch(
       return res.status(400).json({ error: 'tributo deve ser "IPTU" ou "DATI"' });
     }
     const resultado = await excelStore.marcarLancado({
-      codigo: req.params.codigo,
+      codigo: codigoDoParam(req.params.codigo),
       tributo,
       status: status || 'Feito',
       inscricao,
     });
+    res.json(resultado);
+  })
+);
+
+// Exclui o imovel (limpa todos os campos da linha - ver excelStore.excluirImovel
+// pra detalhes de por que nao remove a linha fisicamente). ?inscricao=
+// desambigua qual linha, se o codigo bater em mais de uma. Faz backup do
+// arquivo automaticamente antes de mexer.
+router.delete(
+  '/:codigo',
+  asyncHandler(async (req, res) => {
+    const resultado = await excelStore.excluirImovel(codigoDoParam(req.params.codigo), req.query.inscricao);
     res.json(resultado);
   })
 );
