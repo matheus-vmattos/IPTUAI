@@ -33,6 +33,7 @@ function itemVazio() {
     escolhendoCotaUnica: false,
     reajustePct: '',
     modoRateio: false,
+    rateioPerguntaRespondida: false,
     rateioRotulo: '',
     rateioBuscando: false,
     rateioMembros: [],
@@ -52,6 +53,7 @@ function membroVazio(dadosIniciais) {
     cotaUnica: '',
     parcela: '',
     ultimaParcela: '',
+    reajustePct: '',
     obs: '',
     existente: false,
     ...dadosIniciais,
@@ -295,6 +297,7 @@ export default function Upload() {
           obs: m.obs || '',
           cotaUnica: item.formaPgto === 'Cota única' ? sugestao : '',
           parcela: item.formaPgto === 'Parcelado' ? sugestao : '',
+          reajustePct: item.reajustePct,
           existente: true,
         })
       );
@@ -324,6 +327,7 @@ export default function Upload() {
             dati: data.dati || '',
             proprietario: data.proprietario || '',
             nominalIptu: data.nominalIptu || '',
+            reajustePct: item.reajustePct,
             existente: true,
           }),
         ],
@@ -332,7 +336,7 @@ export default function Upload() {
       if (err?.response?.status === 404) {
         setItem((prev) => ({
           ...prev,
-          rateioMembros: [...prev.rateioMembros, membroVazio({ codigo, existente: false })],
+          rateioMembros: [...prev.rateioMembros, membroVazio({ codigo, reajustePct: item.reajustePct, existente: false })],
         }));
       } else {
         setError(apiErrorMessage(err));
@@ -356,22 +360,19 @@ export default function Upload() {
     });
   }
 
-  // Quando a inscrição do carnê bate em várias linhas, isso já é um forte
-  // sinal de imóvel de rateio - em vez de obrigar a escolher só uma linha,
-  // oferece ir direto pro modo rateio com essas linhas pré-carregadas. Se
-  // alguma já tiver o rótulo do rateio marcado (coluna X), usa ele pra
-  // trazer o grupo completo (pode ter mais linhas que só as da inscrição).
-  async function usarModoRateioComCandidatos(candidatos) {
-    const rotuloComum = candidatos.map((c) => c.imovelDeRateio).find((v) => v !== null && v !== undefined && String(v).trim() !== '');
-    atualizarItem({ modoRateio: true });
-    if (rotuloComum) {
-      await buscarGrupoRateio(String(rotuloComum));
-      return;
-    }
+  // Resposta "Sim" pra pergunta "é imóvel de rateio?": monta a lista de
+  // membros a partir dos "I" cadastrados NA INSCRIÇÃO lida deste carnê (não
+  // do grupo de rateio inteiro - um rótulo pode abranger outras inscrições
+  // sem relação com este carnê específico). Se algum desses "I" já tiver o
+  // rótulo marcado (coluna X), pré-preenche como sugestão de número.
+  function iniciarRateioPorInscricao(candidatos) {
+    const rotuloComum = (candidatos || [])
+      .map((c) => c.imovelDeRateio)
+      .find((v) => v !== null && v !== undefined && String(v).trim() !== '');
     const total = valorTotalReferenciaRateio();
-    const n = candidatos.length || 1;
+    const n = (candidatos || []).length || 1;
     const sugestao = total !== null ? String(Math.round((total / n) * 100) / 100) : '';
-    const membros = candidatos.map((c) =>
+    const membros = (candidatos || []).map((c) =>
       membroVazio({
         codigo: String(c.codigo),
         inscricaoIptu: c.inscricaoIptu || '',
@@ -381,10 +382,17 @@ export default function Upload() {
         obs: c.obs || '',
         cotaUnica: item.formaPgto === 'Cota única' ? sugestao : '',
         parcela: item.formaPgto === 'Parcelado' ? sugestao : '',
+        reajustePct: item.reajustePct,
         existente: true,
       })
     );
-    setItem((prev) => ({ ...prev, rateioMembros: membros }));
+    setItem((prev) => ({
+      ...prev,
+      rateioPerguntaRespondida: true,
+      modoRateio: true,
+      rateioRotulo: rotuloComum ? String(rotuloComum) : '',
+      rateioMembros: membros,
+    }));
   }
 
   async function confirmarRateio() {
@@ -408,6 +416,9 @@ export default function Upload() {
         };
         if (item.tributo === 'IPTU') it.inscricaoIptu = m.inscricaoIptu || undefined;
         if (item.tributo === 'DATI') it.dati = m.dati || undefined;
+        if (m.reajustePct !== '' && m.reajustePct !== undefined && m.reajustePct !== null) {
+          it.reajustePct = m.reajustePct;
+        }
         if (item.formaPgto === 'Cota única') {
           it.cotaUnica = m.cotaUnica;
         } else {
@@ -736,34 +747,64 @@ export default function Upload() {
         <div className="card">
           <h3>Código de identificação do imóvel</h3>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              type="checkbox"
-              checked={item.modoRateio}
-              onChange={(e) =>
-                atualizarItem({
-                  modoRateio: e.target.checked,
-                  codigo: '',
-                  imovelEncontrado: null,
-                  imovelNovo: false,
-                  candidatosAmbiguos: null,
-                })
-              }
-            />
-            Este carnê é de um imóvel de rateio (um valor dividido entre várias linhas "I")
-          </label>
+          {!item.rateioPerguntaRespondida && (() => {
+            const { inscricaoDetectada, imoveisPorInscricao } = fila[indice]?.extracao || {};
+            return (
+              <div className="card destaque">
+                <p className="meta">
+                  {inscricaoDetectada ? (
+                    <>
+                      Inscrição lida do carnê: <strong>{inscricaoDetectada}</strong>
+                      {(imoveisPorInscricao || []).length > 0 && (
+                        <>
+                          {' '}
+                          — cadastrada em {imoveisPorInscricao.length} linha(s) "I" (
+                          {imoveisPorInscricao.map((c) => c.codigo).join(', ')}).
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    'Não consegui identificar a inscrição dentro do PDF.'
+                  )}
+                </p>
+                <p className="meta">Este carnê é de um imóvel de rateio (o valor se divide entre várias linhas "I")?</p>
+                <div className="choice-row">
+                  <button onClick={() => iniciarRateioPorInscricao(imoveisPorInscricao)}>Sim, é rateio</button>
+                  <button
+                    className="link-btn"
+                    onClick={() => atualizarItem({ rateioPerguntaRespondida: true, modoRateio: false })}
+                  >
+                    Não
+                  </button>
+                </div>
+                <div className="actions-row">
+                  <button className="link-btn" onClick={() => setStep(2)}>
+                    ← Voltar
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
 
-          {item.modoRateio && (
+          {item.rateioPerguntaRespondida && item.modoRateio && (
             <div className="card destaque">
               <label>
                 Número do imóvel de rateio (não é o código "I" — é o número usado no sistema contábil)
                 <input
                   value={item.rateioRotulo}
                   onChange={(e) => atualizarItem({ rateioRotulo: e.target.value })}
-                  onBlur={(e) => buscarGrupoRateio(e.target.value)}
+                  onBlur={(e) => {
+                    if (item.rateioMembros.length === 0) buscarGrupoRateio(e.target.value);
+                  }}
                   placeholder="ex: 837"
                 />
               </label>
+              {item.rateioMembros.length === 0 && (
+                <p className="meta">
+                  Nenhum "I" identificado nessa inscrição ainda — digite o número acima (se já existir um grupo,
+                  ele é buscado automaticamente) e adicione as linhas manualmente abaixo.
+                </p>
+              )}
               {item.rateioBuscando && <p className="meta">Buscando linhas desse grupo...</p>}
 
               {item.rateioMembros.length > 0 && (
@@ -851,6 +892,23 @@ export default function Upload() {
                             </label>
                           </>
                         )}
+                        <label>
+                          % de reajuste (provisão pro próximo exercício desta linha)
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={m.reajustePct}
+                            onChange={(e) => atualizarMembro(m.key, { reajustePct: e.target.value })}
+                          />
+                        </label>
+                        {(() => {
+                          const valorBase = item.formaPgto === 'Cota única' ? Number(m.cotaUnica) : Number(m.parcela);
+                          const pct = Number(m.reajustePct);
+                          if (isNaN(valorBase) || isNaN(pct) || m.reajustePct === '') return null;
+                          return (
+                            <p className="meta">Valor programado (com reajuste): {formatarMoeda(valorBase * (1 + pct / 100))}</p>
+                          );
+                        })()}
                       </li>
                     ))}
                   </ul>
@@ -872,7 +930,10 @@ export default function Upload() {
               </label>
 
               <div className="actions-row">
-                <button className="link-btn" onClick={() => setStep(2)}>
+                <button
+                  className="link-btn"
+                  onClick={() => atualizarItem({ rateioPerguntaRespondida: false, modoRateio: false })}
+                >
                   ← Voltar
                 </button>
                 <button disabled={!rateioValido() || loading} onClick={confirmarRateio}>
@@ -882,126 +943,96 @@ export default function Upload() {
             </div>
           )}
 
-          {!item.modoRateio && (
+          {item.rateioPerguntaRespondida && !item.modoRateio && (
             <>
-          {(() => {
-            const { inscricaoDetectada, imoveisPorInscricao } = fila[indice]?.extracao || {};
-            if (!inscricaoDetectada || (imoveisPorInscricao || []).length < 2) return null;
-            return (
-              <div className="card destaque">
-                <p className="meta">
-                  A inscrição <strong>{inscricaoDetectada}</strong> lida do carnê aparece em{' '}
-                  {imoveisPorInscricao.length} linhas da planilha — isso é normalmente um imóvel de rateio.
-                </p>
-                <button onClick={() => usarModoRateioComCandidatos(imoveisPorInscricao)}>
-                  Lançar dividindo entre essas linhas (rateio)
-                </button>
-                <p className="meta">Ou, se for só uma dessas linhas mesmo (sem dividir), escolha qual:</p>
-                <ul className="resumo-list">
-                  {imoveisPorInscricao.map((op) => (
-                    <li key={op.codigo}>
-                      <button
-                        className="link-btn"
-                        onClick={() => escolherImovel(op.codigo, op.inscricaoIptu || op.dati)}
-                      >
-                        I {op.codigo} — {op.nominalIptu || op.proprietario}
-                        {op.obs ? ` (${op.obs})` : ''}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })()}
+              {(item.candidatosAmbiguos || []).length > 0 && (
+                <div className="card destaque">
+                  <p className="meta">
+                    O código <strong>I {item.codigo}</strong> existe em mais de uma linha da planilha — escolha qual:
+                  </p>
+                  <ul className="resumo-list">
+                    {item.candidatosAmbiguos.map((c, i) => (
+                      <li key={`${c.codigo}-${c.inscricaoIptu || c.dati || i}`}>
+                        <button
+                          className="link-btn"
+                          onClick={() => escolherImovel(c.codigo, c.inscricaoIptu || c.dati)}
+                        >
+                          I {c.codigo} — {c.nominalIptu || c.proprietario} — inscrição{' '}
+                          {c.inscricaoIptu || c.dati || 'sem inscrição'}
+                          {c.obs ? ` (${c.obs})` : ''}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
-          {(item.candidatosAmbiguos || []).length > 0 && (
-            <div className="card destaque">
-              <p className="meta">
-                O código <strong>I {item.codigo}</strong> existe em mais de uma linha da planilha — escolha qual:
-              </p>
-              <ul className="resumo-list">
-                {item.candidatosAmbiguos.map((c, i) => (
-                  <li key={`${c.codigo}-${c.inscricaoIptu || c.dati || i}`}>
-                    <button
-                      className="link-btn"
-                      onClick={() => escolherImovel(c.codigo, c.inscricaoIptu || c.dati)}
-                    >
-                      I {c.codigo} — {c.nominalIptu || c.proprietario} — inscrição{' '}
-                      {c.inscricaoIptu || c.dati || 'sem inscrição'}
-                      {c.obs ? ` (${c.obs})` : ''}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          <label>
-            Código (coluna "I" da planilha)
-            <input
-              value={item.codigo}
-              onChange={(e) =>
-                atualizarItem({ codigo: e.target.value, imovelEncontrado: null, imovelNovo: false, candidatosAmbiguos: null })
-              }
-              onBlur={(e) => buscarImovelManual(e.target.value)}
-              placeholder="ex: 213"
-            />
-          </label>
-          {buscandoImovel && <p className="meta">Buscando na planilha...</p>}
-
-          {item.imovelEncontrado && (
-            <div className="success">
-              Imóvel encontrado: {item.imovelEncontrado.proprietario}
-              {(fila[indice]?.extracao?.imoveisPorInscricao || []).length === 1 &&
-                String(fila[indice].extracao.imoveisPorInscricao[0].codigo) === String(item.codigo) && (
-                  <> (identificado pela inscrição do carnê)</>
-                )}
-            </div>
-          )}
-          {item.imovelNovo && (
-            <div className="meta">Código não encontrado na planilha — será criada uma linha nova.</div>
-          )}
-
-          {(item.imovelEncontrado || item.imovelNovo) && (
-            <>
               <label>
-                Proprietário
-                <input value={item.proprietario} onChange={(e) => atualizarItem({ proprietario: e.target.value })} />
-              </label>
-              <label>
-                Nome no carnê do IPTU/DATI (se diferente do proprietário)
+                Código (coluna "I" da planilha)
                 <input
-                  value={item.nominalIptu}
-                  onChange={(e) => atualizarItem({ nominalIptu: e.target.value })}
-                  placeholder="deixe em branco se for o mesmo nome"
+                  value={item.codigo}
+                  onChange={(e) =>
+                    atualizarItem({ codigo: e.target.value, imovelEncontrado: null, imovelNovo: false, candidatosAmbiguos: null })
+                  }
+                  onBlur={(e) => buscarImovelManual(e.target.value)}
+                  placeholder="ex: 213"
                 />
               </label>
-              {item.tributo === 'IPTU' && (
-                <label>
-                  Inscrição IPTU
-                  <input value={item.inscricaoIptu} onChange={(e) => atualizarItem({ inscricaoIptu: e.target.value })} />
-                </label>
-              )}
-              {item.tributo === 'DATI' && (
-                <label>
-                  Inscrição DATI
-                  <input value={item.dati} onChange={(e) => atualizarItem({ dati: e.target.value })} />
-                </label>
-              )}
-            </>
-          )}
+              {buscandoImovel && <p className="meta">Buscando na planilha...</p>}
 
-          <div className="actions-row">
-            <button className="link-btn" onClick={() => setStep(2)}>
-              ← Voltar
-            </button>
-            <button
-              disabled={!item.codigo.trim() || !(item.imovelEncontrado || item.imovelNovo) || !item.proprietario.trim()}
-              onClick={() => setStep(4)}
-            >
-              Continuar
-            </button>
-          </div>
+              {item.imovelEncontrado && (
+                <div className="success">
+                  Imóvel encontrado: {item.imovelEncontrado.proprietario}
+                  {(fila[indice]?.extracao?.imoveisPorInscricao || []).length === 1 &&
+                    String(fila[indice].extracao.imoveisPorInscricao[0].codigo) === String(item.codigo) && (
+                      <> (identificado pela inscrição do carnê)</>
+                    )}
+                </div>
+              )}
+              {item.imovelNovo && (
+                <div className="meta">Código não encontrado na planilha — será criada uma linha nova.</div>
+              )}
+
+              {(item.imovelEncontrado || item.imovelNovo) && (
+                <>
+                  <label>
+                    Proprietário
+                    <input value={item.proprietario} onChange={(e) => atualizarItem({ proprietario: e.target.value })} />
+                  </label>
+                  <label>
+                    Nome no carnê do IPTU/DATI (se diferente do proprietário)
+                    <input
+                      value={item.nominalIptu}
+                      onChange={(e) => atualizarItem({ nominalIptu: e.target.value })}
+                      placeholder="deixe em branco se for o mesmo nome"
+                    />
+                  </label>
+                  {item.tributo === 'IPTU' && (
+                    <label>
+                      Inscrição IPTU
+                      <input value={item.inscricaoIptu} onChange={(e) => atualizarItem({ inscricaoIptu: e.target.value })} />
+                    </label>
+                  )}
+                  {item.tributo === 'DATI' && (
+                    <label>
+                      Inscrição DATI
+                      <input value={item.dati} onChange={(e) => atualizarItem({ dati: e.target.value })} />
+                    </label>
+                  )}
+                </>
+              )}
+
+              <div className="actions-row">
+                <button className="link-btn" onClick={() => atualizarItem({ rateioPerguntaRespondida: false })}>
+                  ← Voltar
+                </button>
+                <button
+                  disabled={!item.codigo.trim() || !(item.imovelEncontrado || item.imovelNovo) || !item.proprietario.trim()}
+                  onClick={() => setStep(4)}
+                >
+                  Continuar
+                </button>
+              </div>
             </>
           )}
         </div>

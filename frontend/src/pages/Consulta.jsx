@@ -52,6 +52,9 @@ export default function Consulta() {
   const [form, setForm] = useState({});
   const [salvando, setSalvando] = useState(false);
 
+  const [grupoRateio, setGrupoRateio] = useState(null);
+  const [inscricaoRateio, setInscricaoRateio] = useState(null);
+
   const location = useLocation();
 
   useEffect(() => {
@@ -77,10 +80,22 @@ export default function Consulta() {
     setLoading(true);
     setImovel(null);
     setEditando(false);
+    setGrupoRateio(null);
+    setInscricaoRateio(null);
     try {
-      const { data } = await api.get('/imoveis', { params: { q: busca.trim() } });
-      setResultados(data);
-      if (data.length === 1) abrirImovel(data[0].codigo, data[0].inscricaoIptu || data[0].dati);
+      const [resImoveis, resRateio] = await Promise.all([
+        api.get('/imoveis', { params: { q: busca.trim() } }),
+        api.get(`/rateios/${encodeURIComponent(busca.trim())}`).catch(() => null),
+      ]);
+      setResultados(resImoveis.data);
+      // Bateu num numero de imovel de rateio (nao e codigo "I") - mostra o
+      // drill-down em vez de (ou alem de) tentar achar por codigo/nome.
+      if (resRateio?.data?.totalImoveis > 0) {
+        setGrupoRateio(resRateio.data);
+        if (resRateio.data.porInscricao.length === 1) setInscricaoRateio(resRateio.data.porInscricao[0]);
+      } else if (resImoveis.data.length === 1) {
+        abrirImovel(resImoveis.data[0].codigo, resImoveis.data[0].inscricaoIptu || resImoveis.data[0].dati);
+      }
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {
@@ -185,7 +200,7 @@ export default function Consulta() {
         <input
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
-          placeholder="Código, inscrição, proprietário..."
+          placeholder="Código, inscrição, proprietário ou número do imóvel de rateio..."
         />
         <button type="submit" disabled={loading}>
           {loading ? 'Buscando...' : 'Buscar'}
@@ -193,6 +208,48 @@ export default function Consulta() {
       </form>
 
       {error && <div className="error">{error}</div>}
+
+      {grupoRateio && !imovel && (
+        <div className="card destaque">
+          <h4>Imóvel de rateio {grupoRateio.rotuloContabil}</h4>
+          <p className="meta">
+            {grupoRateio.totalImoveis} linha(s) em {grupoRateio.porInscricao.length} inscrição(ões) — não é código
+            "I", é o número usado no sistema contábil.
+          </p>
+          {!inscricaoRateio ? (
+            <ul className="resumo-list">
+              {grupoRateio.porInscricao.map((grp) => (
+                <li key={grp.inscricao || 'sem-inscricao'}>
+                  <button className="choice-item" onClick={() => setInscricaoRateio(grp)}>
+                    Inscrição {grp.inscricao || '(sem inscrição)'} — {grp.imoveis.map((m) => `I ${m.codigo}`).join(', ')}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <>
+              {grupoRateio.porInscricao.length > 1 && (
+                <button className="link-btn" onClick={() => setInscricaoRateio(null)}>
+                  ← outras inscrições deste rateio
+                </button>
+              )}
+              <p className="meta">Imóveis da inscrição {inscricaoRateio.inscricao}:</p>
+              <ul className="resumo-list">
+                {inscricaoRateio.imoveis.map((m, i) => (
+                  <li key={`${m.codigo}-${i}`}>
+                    <button
+                      className="choice-item"
+                      onClick={() => abrirImovel(m.codigo, m.inscricaoIptu || m.dati)}
+                    >
+                      I {m.codigo} — {m.nominalIptu || m.proprietario}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
 
       {resultados.length > 1 && !imovel && (
         <div className="card">

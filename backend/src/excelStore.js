@@ -111,18 +111,46 @@ function linhasComCodigo(rows, sharedStrings, codigo) {
 // candidatas), a ambiguidade e devolvida pro chamador decidir - NUNCA
 // silenciosamente pega "a primeira que achar", que e o jeito de acabar
 // lendo/editando/lancando na linha errada.
+function linhaTemInscricao(f, alvo) {
+  const iptu = normalizarInscricao(f.inscricaoIptu);
+  const dati = normalizarInscricao(f.dati);
+  return (iptu && iptu === alvo) || (dati && dati === alvo);
+}
+
+function linhaSemInscricaoCadastrada(f) {
+  return !normalizarInscricao(f.inscricaoIptu) && !normalizarInscricao(f.dati);
+}
+
 function localizarLinha(rows, sharedStrings, codigo, inscricao) {
   const linhas = linhasComCodigo(rows, sharedStrings, codigo);
   if (linhas.length === 0) return { rowNum: null, ambiguo: false, candidatos: [] };
-  if (linhas.length === 1) return { rowNum: linhas[0], ambiguo: false, candidatos: [] };
 
-  if (inscricao) {
-    const alvo = normalizarInscricao(inscricao);
-    const bateram = linhas.filter((r) => {
-      const f = fieldsOfRow(rows.get(r).xml, sharedStrings);
-      return normalizarInscricao(f.inscricaoIptu) === alvo || normalizarInscricao(f.dati) === alvo;
-    });
+  const alvo = inscricao ? normalizarInscricao(inscricao) : null;
+
+  if (linhas.length === 1) {
+    if (!alvo) return { rowNum: linhas[0], ambiguo: false, candidatos: [] };
+    const f = fieldsOfRow(rows.get(linhas[0]).xml, sharedStrings);
+    // Bate com a inscricao da linha, ou a linha ainda nao tem inscricao
+    // cadastrada (primeiro lancamento) - e a mesma linha.
+    if (linhaSemInscricaoCadastrada(f) || linhaTemInscricao(f, alvo)) {
+      return { rowNum: linhas[0], ambiguo: false, candidatos: [] };
+    }
+    // O codigo existe, mas com OUTRA inscricao - o mesmo "I" pode pagar mais
+    // de um IPTU/DATI (inscricoes diferentes na prefeitura). Nao e a mesma
+    // linha: devolve "nao encontrado" pra criar uma linha nova, em vez de
+    // sobrescrever por engano a inscricao que ja estava la.
+    return { rowNum: null, ambiguo: false, candidatos: [] };
+  }
+
+  if (alvo) {
+    const bateram = linhas.filter((r) => linhaTemInscricao(fieldsOfRow(rows.get(r).xml, sharedStrings), alvo));
     if (bateram.length === 1) return { rowNum: bateram[0], ambiguo: false, candidatos: [] };
+    if (bateram.length === 0) {
+      // Nenhuma das linhas existentes desse codigo tem essa inscricao -
+      // mesmo raciocinio do caso de 1 linha so: e um IPTU/DATI novo pro
+      // mesmo "I", cria linha nova em vez de arriscar a linha errada.
+      return { rowNum: null, ambiguo: false, candidatos: [] };
+    }
   }
 
   const candidatos = linhas.map((r) => fieldsOfRow(rows.get(r).xml, sharedStrings));
@@ -309,10 +337,24 @@ function montarGrupoRateio(rotulo, membrosFields, nParcelas) {
     return soma || null;
   };
 
+  // Um rateio pode abranger mais de uma inscricao (cada uma com um ou mais
+  // "I") - quebra os membros por inscricao pra permitir o "drill-down" na
+  // busca (escolhe o rateio -> escolhe a inscricao -> ve os imoveis dela).
+  const porInscricaoMap = new Map();
+  for (const m of membros) {
+    const chave = m.inscricaoIptu || m.dati || null;
+    if (!porInscricaoMap.has(chave)) porInscricaoMap.set(chave, []);
+    porInscricaoMap.get(chave).push(m);
+  }
+  const porInscricao = [...porInscricaoMap.entries()]
+    .map(([inscricao, imoveis]) => ({ inscricao, imoveis }))
+    .sort((a, b) => String(a.inscricao).localeCompare(String(b.inscricao), undefined, { numeric: true }));
+
   return {
     rotuloContabil: rotulo,
     totalImoveis: membros.length,
     imoveis: membros,
+    porInscricao,
     totais: {
       iptuCotaUnica: somar('iptuCotaUnica'),
       iptuParcelado: somar('iptuTotalCalculado'),
@@ -373,9 +415,10 @@ async function listarGruposDeRateio() {
 // rateio novo" poder usar a mesma tela sem tratar caso especial.
 async function getGrupoDeRateio(rotulo) {
   const alvo = String(rotulo ?? '').trim();
-  if (!alvo) return { rotuloContabil: '', totalImoveis: 0, imoveis: [], totais: {} };
+  const vazio = (r) => ({ rotuloContabil: r, totalImoveis: 0, imoveis: [], porInscricao: [], totais: {} });
+  if (!alvo) return vazio('');
   const grupos = await listarGruposDeRateio();
-  return grupos.find((g) => g.rotuloContabil === alvo) || { rotuloContabil: alvo, totalImoveis: 0, imoveis: [], totais: {} };
+  return grupos.find((g) => g.rotuloContabil === alvo) || vazio(alvo);
 }
 
 // Imoveis ainda sem carne lancado neste exercicio (coluna "salvo" != Feito)

@@ -57,38 +57,48 @@ instalar assim que a atualização estiver pronta.
    quando diferente), a **inscrição do imóvel lida de dentro do PDF**
    (mais confiável que o nome do arquivo) e o **código do imóvel pelo
    nome do arquivo** (ex: `I213.pdf`, `213 - Rua tal.pdf`) como reforço —
-   sempre uma sugestão, revise antes de confirmar. Quando a inscrição lida
-   bate com mais de uma linha da planilha (imóvel de rateio), o app mostra
-   as opções pra você escolher a certa.
+   sempre uma sugestão, revise antes de confirmar. Depois de ler a
+   inscrição, o app **sempre pergunta se o carnê é de um imóvel de
+   rateio** (um número usado no seu sistema contábil pra cobrar o
+   proprietário, diferente do código "I").
+   - **Não**: segue no fluxo normal de um imóvel só. Se a inscrição bater
+     em mais de uma linha da planilha mesmo assim, mostra as opções pra
+     escolher a certa.
+   - **Sim**: informa o número do rateio (se já existir, é reconhecido) e
+     o app já traz os **"I" cadastrados nessa inscrição específica** do
+     carnê (pode ter mais de um) — dá pra adicionar outras linhas
+     manualmente também. Pra cada linha: valor **e % de reajuste**
+     (provisão pro próximo exercício) são independentes, já que a divisão
+     real varia de carnê pra carnê. O PDF é salvo uma vez só e fica
+     acessível a partir de qualquer linha do grupo.
 2. Diga se o carnê é de **IPTU ou DATI**, se é **cota única ou
    parcelado**, e o **código de identificação do imóvel** (coluna `I` da
    planilha, ex: `213`). Se o código já existir, os dados são gravados na
-   linha existente; se não existir, uma linha nova é criada. **Alguns
-   códigos existem em mais de uma linha** (ex: um "I" com mais de uma
-   inscrição/guia de IPTU) — nesse caso o app mostra a lista de linhas
-   candidatas pra você escolher qual é a certa antes de seguir. Se o nome
-   impresso no carnê for diferente do proprietário (ex: guia em nome de
-   terceiro), informe em **"Nome no carnê"** — os dois ficam guardados
-   separadamente na planilha. Se o carnê for de um **imóvel de rateio**
-   (um único carnê cujo valor se divide entre várias linhas "I", e que é
-   controlado por um número usado no seu sistema contábil, não pelo
-   código "I"), marque a opção "imóvel de rateio", informe esse número e
-   monte a lista de linhas que participam — o app já sugere as linhas do
-   grupo (se já existir) e uma divisão inicial igual, mas cada linha é
-   editável, já que a divisão real costuma variar. O PDF é salvo uma vez
-   só e fica acessível a partir de qualquer uma das linhas do grupo.
+   linha existente; se não existir, uma linha nova é criada. **Um mesmo
+   "I" pode ter mais de um IPTU/DATI** (inscrições diferentes na
+   prefeitura) — o app nunca sobrescreve por engano: se a inscrição
+   informada não bater com a que já está na linha existente, cria uma
+   linha nova pra esse "segundo IPTU" em vez de substituir o primeiro.
+   Quando o código bate em mais de uma linha e a inscrição não resolve
+   sozinha, mostra a lista de candidatas pra escolher. Se o nome impresso
+   no carnê for diferente do proprietário (ex: guia em nome de terceiro),
+   informe em **"Nome no carnê"** — os dois ficam guardados
+   separadamente na planilha.
 3. Escolha **quem paga** (lista vem da própria planilha, aba "Listas").
 4. Confirme — os valores, o proprietário/inscrição e o link do PDF salvo
    são gravados na linha do imóvel, e a coluna "salvo" desse tributo é
    marcada como "Feito". Com vários PDFs, o app passa pro próximo da fila
    sozinho e mostra um resumo no final.
-5. **Consultar**: busque por código, inscrição ou proprietário para ver
-   os valores atuais (cota única, parcela, total calculado, valor a
-   pagar), marcar o tributo como lançado no sistema contábil da empresa,
-   abrir o PDF do carnê salvo, ou **editar livremente** qualquer campo do
-   imóvel (útil pra corrigir algo sem precisar relançar o carnê inteiro).
-   Se a busca encontrar várias linhas com o mesmo código, mostra a lista
-   pra você escolher a certa (pela inscrição). Se o imóvel fizer parte de
+5. **Consultar**: busque por código, inscrição, proprietário **ou número
+   do imóvel de rateio** para ver os valores atuais (cota única, parcela,
+   total calculado, valor a pagar), marcar o tributo como lançado no
+   sistema contábil da empresa, abrir o PDF do carnê salvo, ou **editar
+   livremente** qualquer campo do imóvel (útil pra corrigir algo sem
+   precisar relançar o carnê inteiro). Buscar por um número de rateio abre
+   um seletor: escolhe a inscrição (pode ter mais de uma sob o mesmo
+   número) e depois o "I" dentro dela. Se a busca encontrar várias linhas
+   com o mesmo código, mostra a lista pra você escolher a certa (pela
+   inscrição). Se o imóvel fizer parte de
    um **imóvel de rateio** (campo "Imóvel de rateio" preenchido — o número
    usado no sistema contábil pra cobrar o proprietário, não um código
    "I"), mostra um card com o valor de cada linha do grupo e o total
