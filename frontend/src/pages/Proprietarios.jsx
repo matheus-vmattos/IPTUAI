@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api, apiErrorMessage } from '../api.js';
+import { useModoLeitura } from '../App.jsx';
 
 function formatarMoeda(valor) {
   if (valor === null || valor === undefined || valor === '') return '—';
@@ -75,6 +76,7 @@ function montarHtmlRelatorio(resumo) {
 }
 
 export default function Proprietarios() {
+  const modoLeitura = useModoLeitura();
   const [busca, setBusca] = useState('');
   const [resultados, setResultados] = useState([]);
   const [resumo, setResumo] = useState(null);
@@ -194,22 +196,26 @@ export default function Proprietarios() {
           <div className="iptu-header">
             <h3>{resumo.proprietario}</h3>
             <div>
-              <button
-                className="link-btn"
-                onClick={() => {
-                  setRenomeando((v) => !v);
-                  setNovoNome('');
-                }}
-              >
-                {renomeando ? 'Cancelar' : 'Renomear (imóvel mudou de dono)'}
-              </button>{' '}
+              {!modoLeitura && (
+                <>
+                  <button
+                    className="link-btn"
+                    onClick={() => {
+                      setRenomeando((v) => !v);
+                      setNovoNome('');
+                    }}
+                  >
+                    {renomeando ? 'Cancelar' : 'Renomear (imóvel mudou de dono)'}
+                  </button>{' '}
+                </>
+              )}
               <button className="link-btn" onClick={gerarPdf}>
                 Gerar PDF
               </button>
             </div>
           </div>
 
-          {renomeando && (
+          {!modoLeitura && renomeando && (
             <form className="card destaque" onSubmit={confirmarRenomeacao}>
               <p className="meta">
                 Troca o proprietário em todos os {resumo.totalImoveis} imóveis de "{resumo.proprietario}" de uma vez —

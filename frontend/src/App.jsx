@@ -1,17 +1,28 @@
+import { createContext, useContext, useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate, NavLink } from 'react-router-dom';
+import { api } from './api.js';
 import Upload from './pages/Upload.jsx';
 import Consulta from './pages/Consulta.jsx';
 import Proprietarios from './pages/Proprietarios.jsx';
 import Painel from './pages/Painel.jsx';
 import Config from './pages/Config.jsx';
 
-function Shell({ children }) {
+// Contexto simples pra qualquer página saber se o modo somente leitura
+// (Configurações) está ativo, sem cada uma ter que buscar /config sozinha
+// só pra isso.
+const AppConfigContext = createContext({ modoLeitura: false });
+export function useModoLeitura() {
+  return useContext(AppConfigContext).modoLeitura;
+}
+
+function Shell({ children, modoLeitura }) {
   return (
     <div className="shell">
       <header className="topbar">
         <span className="brand">IPTUAI</span>
+        {modoLeitura && <span className="badge-leitura">MODO LEITURA</span>}
         <nav>
-          <NavLink to="/upload">Lançar</NavLink>
+          {!modoLeitura && <NavLink to="/upload">Lançar</NavLink>}
           <NavLink to="/consulta">Consultar</NavLink>
           <NavLink to="/proprietarios">Proprietários</NavLink>
           <NavLink to="/painel">Painel</NavLink>
@@ -24,18 +35,29 @@ function Shell({ children }) {
 }
 
 export default function App() {
+  const [appConfig, setAppConfig] = useState({ modoLeitura: false });
+
+  useEffect(() => {
+    api
+      .get('/config')
+      .then(({ data }) => setAppConfig(data))
+      .catch(() => {});
+  }, []);
+
   return (
-    <HashRouter>
-      <Shell>
-        <Routes>
-          <Route path="/upload" element={<Upload />} />
-          <Route path="/consulta" element={<Consulta />} />
-          <Route path="/proprietarios" element={<Proprietarios />} />
-          <Route path="/painel" element={<Painel />} />
-          <Route path="/config" element={<Config />} />
-          <Route path="*" element={<Navigate to="/upload" replace />} />
-        </Routes>
-      </Shell>
-    </HashRouter>
+    <AppConfigContext.Provider value={appConfig}>
+      <HashRouter>
+        <Shell modoLeitura={appConfig.modoLeitura}>
+          <Routes>
+            <Route path="/upload" element={appConfig.modoLeitura ? <Navigate to="/consulta" replace /> : <Upload />} />
+            <Route path="/consulta" element={<Consulta />} />
+            <Route path="/proprietarios" element={<Proprietarios />} />
+            <Route path="/painel" element={<Painel />} />
+            <Route path="/config" element={<Config />} />
+            <Route path="*" element={<Navigate to={appConfig.modoLeitura ? '/consulta' : '/upload'} replace />} />
+          </Routes>
+        </Shell>
+      </HashRouter>
+    </AppConfigContext.Provider>
   );
 }

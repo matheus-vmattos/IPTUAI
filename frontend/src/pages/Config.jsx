@@ -224,6 +224,24 @@ export default function Config() {
       </section>
 
       <section className="card">
+        <h3>Modo somente leitura</h3>
+        <p className="meta">
+          Desativa lançamento, edição, renomeação e qualquer outra escrita — só busca e consulta continuam
+          funcionando. Útil pra dar acesso a alguém conferir os IPTUs sem risco de mexer na planilha real.
+        </p>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            type="checkbox"
+            checked={!!config.modoLeitura}
+            onChange={(e) => salvar({ modoLeitura: e.target.checked })}
+            disabled={loading}
+            style={{ width: 'auto' }}
+          />
+          Ativar modo somente leitura
+        </label>
+      </section>
+
+      <section className="card">
         <h3>Pasta para salvar os carnês (PDF)</h3>
         <p className="meta">{config.pdfFolder || 'Nenhuma pasta selecionada.'}</p>
         <button onClick={escolherPasta} disabled={loading}>

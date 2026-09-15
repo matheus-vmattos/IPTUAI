@@ -116,13 +116,19 @@ instalar assim que a atualização estiver pronta.
    todos os imóveis dele de uma vez (útil quando o imóvel foi vendido) —
    não mexe em mais nada (inscrições, quem paga etc. continuam como
    estavam).
-7. **Virada de exercício** (em Configurações): quando começar um ano novo,
+7. **Modo somente leitura** (em Configurações): desativa lançamento, edição,
+   renomeação e qualquer outra escrita — só busca/consulta continuam
+   funcionando (inclusive backend recusa essas rotas, não é só esconder
+   botão). Útil pra dar o app pra alguém conferir os IPTUs sem risco de
+   mexer na planilha real; recomendado usar com uma **cópia** da planilha,
+   não o arquivo ao vivo.
+8. **Virada de exercício** (em Configurações): quando começar um ano novo,
    limpa de uma vez os valores/status/quem paga/forma de pagamento
    lançados de **todos os imóveis**, mantendo proprietário, nome no
    carnê, inscrições, rateio e OBS — assim não precisa recadastrar nada
    que não muda de ano pra ano. Faz backup automático do arquivo antes de
    limpar.
-8. **Provisão pro próximo exercício**: ao lançar um carnê, o app calcula e
+9. **Provisão pro próximo exercício**: ao lançar um carnê, o app calcula e
    guarda automaticamente uma estimativa com reajuste (% padrão em
    Configurações, editável a cada lançamento) — é o valor a provisionar no
    seu sistema contábil. Para lançamentos parcelados (a maioria), o app já
@@ -132,7 +138,7 @@ instalar assim que a atualização estiver pronta.
    o valor real — total e também **parcela a parcela**, pra você saber
    exatamente quanto devolver ou cobrar a mais em cada parcela, sem
    precisar guardar isso em outro lugar.
-9. **Painel**: visão geral pra entender onde lançar um carnê — lista todos
+10. **Painel**: visão geral pra entender onde lançar um carnê — lista todos
    os imóveis de rateio já usados (com as linhas de cada um) pra
    reconhecer rápido qual é qual, e as pendências do exercício (imóveis
    ainda sem carnê lançado, separado por IPTU/DATI). Clicar num item leva

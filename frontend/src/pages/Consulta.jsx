@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { api, apiErrorMessage } from '../api.js';
+import { useModoLeitura } from '../App.jsx';
 
 function formatarMoeda(valor) {
   if (valor === null || valor === undefined || valor === '') return '—';
@@ -41,6 +42,7 @@ function paraFormulario(imovel) {
 }
 
 export default function Consulta() {
+  const modoLeitura = useModoLeitura();
   const [busca, setBusca] = useState('');
   const [resultados, setResultados] = useState([]);
   const [imovel, setImovel] = useState(null);
@@ -273,9 +275,11 @@ export default function Consulta() {
         <div className="resultado">
           <div className="iptu-header">
             <h3>Imóvel I {imovel.codigo} — {imovel.proprietario}</h3>
-            <button className="link-btn" onClick={iniciarEdicao}>
-              Editar
-            </button>
+            {!modoLeitura && (
+              <button className="link-btn" onClick={iniciarEdicao}>
+                Editar
+              </button>
+            )}
           </div>
           {imovel.nominalIptu && (
             <p className="meta">Nome no carnê: {imovel.nominalIptu}</p>
@@ -302,7 +306,7 @@ export default function Consulta() {
               )}
               <li>
                 Lançado no sistema: <strong>{imovel.iptuLancado || 'Não'}</strong>{' '}
-                {imovel.iptuLancado !== 'Feito' && (
+                {!modoLeitura && imovel.iptuLancado !== 'Feito' && (
                   <button className="link-btn" onClick={() => marcarLancado('IPTU')}>
                     marcar como lançado
                   </button>
@@ -332,7 +336,7 @@ export default function Consulta() {
               )}
               <li>
                 Lançado no sistema: <strong>{imovel.datiLancado || 'Não'}</strong>{' '}
-                {imovel.datiLancado !== 'Feito' && (
+                {!modoLeitura && imovel.datiLancado !== 'Feito' && (
                   <button className="link-btn" onClick={() => marcarLancado('DATI')}>
                     marcar como lançado
                   </button>
@@ -394,14 +398,18 @@ export default function Consulta() {
                       ? formatarMoeda((Number(m.iptuCotaUnica) || 0) + (Number(m.datiCotaUnica) || 0))
                       : formatarMoeda((Number(m.iptuTotalCalculado) || 0) + (Number(m.datiTotalCalculado) || 0))}
                     {m.codigo === imovel.codigo && m.inscricaoIptu === imovel.inscricaoIptu && ' (este)'}
-                    {' — '}
-                    <button
-                      type="button"
-                      className="link-btn"
-                      onClick={() => removerDoRateio(m.codigo, m.inscricaoIptu || m.dati)}
-                    >
-                      remover deste rateio
-                    </button>
+                    {!modoLeitura && (
+                      <>
+                        {' — '}
+                        <button
+                          type="button"
+                          className="link-btn"
+                          onClick={() => removerDoRateio(m.codigo, m.inscricaoIptu || m.dati)}
+                        >
+                          remover deste rateio
+                        </button>
+                      </>
+                    )}
                   </li>
                 ))}
               </ul>

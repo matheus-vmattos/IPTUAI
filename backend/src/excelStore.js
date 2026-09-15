@@ -25,7 +25,7 @@ const LISTAS_PATH = 'xl/worksheets/sheet3.xml'; // aba "Listas"
 const SHARED_STRINGS_PATH = 'xl/sharedStrings.xml';
 const TABLE_PATH = 'xl/tables/table1.xml';
 
-const CONFIG_PADRAO = { xlsxPath: null, pdfFolder: null, reajustePadrao: 5 };
+const CONFIG_PADRAO = { xlsxPath: null, pdfFolder: null, reajustePadrao: 5, modoLeitura: false };
 
 async function readConfig() {
   try {

@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
+const excelStore = require('./excelStore');
 const configRoutes = require('./routes/configRoutes');
 const imoveisRoutes = require('./routes/imoveisRoutes');
 const lancamentosRoutes = require('./routes/lancamentosRoutes');
@@ -15,6 +16,22 @@ app.use(cors());
 app.use(express.json());
 
 app.get('/health', (req, res) => res.json({ ok: true }));
+
+// Modo somente leitura: pra dar acesso de visualização a alguém sem risco de
+// mexer nos dados reais. Bloqueia toda escrita nos dados da planilha, mas
+// deixa /config passar (é de lá que se liga/desliga o próprio modo).
+app.use(async (req, res, next) => {
+  if (req.method === 'GET' || req.path.startsWith('/config')) return next();
+  try {
+    const config = await excelStore.readConfig();
+    if (config.modoLeitura) {
+      return res.status(403).json({ error: 'Modo somente leitura ativado — lançamentos e edições estão desativados.' });
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 app.use('/config', configRoutes);
 app.use('/imoveis', imoveisRoutes);

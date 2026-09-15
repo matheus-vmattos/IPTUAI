@@ -74,6 +74,18 @@ body {
   text-shadow: 0 0 12px rgba(56, 214, 255, 0.45);
 }
 
+.badge-leitura {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--warning);
+  background: var(--warning-bg);
+  border: 1px solid rgba(255, 200, 87, 0.35);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  font-family: var(--mono);
+}
+
 .topbar nav {
   display: flex;
   gap: 4px;
