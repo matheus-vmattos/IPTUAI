@@ -350,6 +350,14 @@ export default function Consulta() {
               </li>
               {imovel.imovelDeRateio && <li>Imóvel de rateio: {imovel.imovelDeRateio}</li>}
               {imovel.obs && <li>OBS: {imovel.obs}</li>}
+              {imovel.linkCarne && (
+                <li>
+                  Carnê salvo:{' '}
+                  <button className="link-btn" title={imovel.linkCarne} onClick={abrirCarne}>
+                    {imovel.linkCarne.split(/[/\\]/).pop()}
+                  </button>
+                </li>
+              )}
             </ul>
             {imovel.linkCarne && <button onClick={abrirCarne}>Abrir carnê salvo</button>}
           </div>
