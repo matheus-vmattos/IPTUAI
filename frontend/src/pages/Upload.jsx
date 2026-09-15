@@ -263,6 +263,15 @@ export default function Upload() {
     return valorTotalDoItem(item, config?.listas?.nParcelas || 1);
   }
 
+  // "Quem paga" é obrigatório em cada linha, mas quase sempre é o mesmo
+  // pra todo o grupo do rateio - evita ter que escolher uma por uma.
+  function aplicarQuemPagaTodos(valor) {
+    setItem((prev) => ({
+      ...prev,
+      rateioMembros: prev.rateioMembros.map((m) => ({ ...m, quemPaga: valor })),
+    }));
+  }
+
   function atualizarMembro(key, campos) {
     setItem((prev) => ({
       ...prev,
@@ -352,12 +361,22 @@ export default function Upload() {
   }
 
   function rateioValido() {
-    if (!item.rateioRotulo.trim() || item.rateioMembros.length === 0) return false;
-    return item.rateioMembros.every((m) => {
-      if (!m.codigo.trim() || !m.quemPaga) return false;
-      if (item.formaPgto === 'Cota única') return m.cotaUnica !== '' && !isNaN(Number(m.cotaUnica));
-      return m.parcela !== '' && !isNaN(Number(m.parcela));
-    });
+    return rateioPendencias().length === 0;
+  }
+
+  // Lista em português o que falta pra poder salvar - sem isso o botão só
+  // fica desabilitado sem explicar por quê.
+  function rateioPendencias() {
+    const pendencias = [];
+    if (!item.rateioRotulo.trim()) pendencias.push('informe o número do imóvel de rateio');
+    if (item.rateioMembros.length === 0) pendencias.push('adicione ao menos uma linha "I"');
+    const semValor = item.rateioMembros.filter((m) =>
+      item.formaPgto === 'Cota única' ? m.cotaUnica === '' || isNaN(Number(m.cotaUnica)) : m.parcela === '' || isNaN(Number(m.parcela))
+    );
+    if (semValor.length > 0) pendencias.push(`falta valor em: ${semValor.map((m) => `I ${m.codigo || '(novo)'}`).join(', ')}`);
+    const semQuemPaga = item.rateioMembros.filter((m) => !m.quemPaga);
+    if (semQuemPaga.length > 0) pendencias.push(`falta "quem paga" em: ${semQuemPaga.map((m) => `I ${m.codigo || '(novo)'}`).join(', ')}`);
+    return pendencias;
   }
 
   // Resposta "Sim" pra pergunta "é imóvel de rateio?": monta a lista de
@@ -809,6 +828,17 @@ export default function Upload() {
 
               {item.rateioMembros.length > 0 && (
                 <>
+                  <label>
+                    Quem paga (aplica a todas as linhas abaixo)
+                    <select value="" onChange={(e) => e.target.value && aplicarQuemPagaTodos(e.target.value)}>
+                      <option value="">— escolher pra todas —</option>
+                      {(config?.listas?.quemPagaOpcoes || []).map((op) => (
+                        <option key={op} value={op}>
+                          {op}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <p className="meta">
                     Valor de referência do carnê: {formatarMoeda(valorTotalReferenciaRateio())} — soma das linhas
                     abaixo: {formatarMoeda(somaMembrosRateio())}
@@ -928,6 +958,10 @@ export default function Upload() {
                   }}
                 />
               </label>
+
+              {!rateioValido() && rateioPendencias().length > 0 && (
+                <p className="meta">Falta pra salvar: {rateioPendencias().join(' · ')}</p>
+              )}
 
               <div className="actions-row">
                 <button
