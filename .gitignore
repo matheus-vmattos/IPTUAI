@@ -10,6 +10,7 @@ backend/data/
 
 # frontend build
 frontend/dist/
+frontend/dist-demo/
 frontend/dist-electron/
 frontend/release/
 

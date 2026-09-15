@@ -15,9 +15,17 @@ export function useModoLeitura() {
   return useContext(AppConfigContext).modoLeitura;
 }
 
+const isDemo = import.meta.env.MODE === 'demo';
+
 function Shell({ children, modoLeitura }) {
   return (
     <div className="shell">
+      {isDemo && (
+        <div className="demo-banner">
+          Modo demonstração — dados fictícios, só para portfólio. A versão real do IPTUAI está em uso por
+          uma empresa de administração de imóveis, com dados sigilosos de clientes reais.
+        </div>
+      )}
       <header className="topbar">
         <span className="brand">IPTUAI</span>
         {modoLeitura && <span className="badge-leitura">MODO LEITURA</span>}

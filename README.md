@@ -161,6 +161,25 @@ arredondamento). Quando há mais de uma alternativa de cota única, o app
 pergunta qual delas foi efetivamente usada antes de seguir para a revisão
 final.
 
+## Build de demonstração (portfólio)
+
+`frontend/src/api.demo.js` é uma API falsa (mesma interface de `api.js`) que
+responde com dados fictícios guardados só em memória do navegador — usada
+pra publicar uma versão web interativa (sem backend real, sem planilha real)
+pra mostrar o app funcionando fora do desktop. Pra gerar essa build:
+
+```bash
+cd frontend
+cp src/api.js /tmp/api.js.bak
+cp src/api.demo.js src/api.js
+npx vite build --mode demo --outDir dist-demo
+cp /tmp/api.js.bak src/api.js   # restaura a api real
+```
+
+Em modo `demo` (`import.meta.env.MODE === 'demo'`), a interface mostra um
+aviso fixo no topo deixando claro que é uma demonstração com dados
+fictícios. `dist-demo/` nunca é commitado (está no `.gitignore`).
+
 ## Build do app desktop (com auto-update)
 
 **Automático (recomendado):** o workflow `.github/workflows/build-windows.yml`
