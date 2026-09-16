@@ -89,6 +89,7 @@ export default function Consulta() {
   // assistente de Lançar (que exige subir o PDF de novo).
   const [dividindo, setDividindo] = useState(false);
   const [tributoDivisao, setTributoDivisao] = useState('IPTU');
+  const [inscricaoDivisao, setInscricaoDivisao] = useState('');
   const [rotuloDivisao, setRotuloDivisao] = useState('');
   const [formaPgtoDivisao, setFormaPgtoDivisao] = useState('Parcelado');
   const [valorTotalDivisao, setValorTotalDivisao] = useState('');
@@ -263,8 +264,7 @@ export default function Consulta() {
   // Busca todas as linhas com essa inscrição exata (IPTU ou DATI) - linhas
   // sem código "I" não entram (não dá pra lançar valor nelas; use Editar ou
   // Excluir pra essas primeiro).
-  async function carregarMembrosDivisao(tributo) {
-    const inscricao = tributo === 'IPTU' ? imovel.inscricaoIptu : imovel.dati;
+  async function carregarMembrosDivisao(inscricao) {
     if (!inscricao) {
       setMembrosDivisao([]);
       return;
@@ -292,16 +292,35 @@ export default function Consulta() {
     }
   }
 
-  function abrirDivisao() {
-    if (!imovel) return;
-    const tributo = imovel.inscricaoIptu ? 'IPTU' : 'DATI';
+  // Ponto único de entrada da divisão, usado tanto a partir de um "I"
+  // específico quanto a partir do imóvel de rateio (número contábil) direto
+  // - preferível, já que é ele quem "manda" nesses dados, não uma unidade
+  // qualquer do grupo.
+  function iniciarDivisao(tributo, inscricao, rotulo, formaPgto) {
     setTributoDivisao(tributo);
-    setRotuloDivisao(imovel.imovelDeRateio || imovel.grupoRateio?.rotuloContabil || '');
-    setFormaPgtoDivisao(imovel.formaPgto || 'Parcelado');
+    setInscricaoDivisao(inscricao);
+    setRotuloDivisao(rotulo || '');
+    setFormaPgtoDivisao(formaPgto || 'Parcelado');
     setValorTotalDivisao('');
     setError('');
     setDividindo(true);
-    carregarMembrosDivisao(tributo);
+    carregarMembrosDivisao(inscricao);
+  }
+
+  // A partir do "I" aberto em Consultar.
+  function abrirDivisao() {
+    if (!imovel) return;
+    const tributo = imovel.inscricaoIptu ? 'IPTU' : 'DATI';
+    const inscricao = tributo === 'IPTU' ? imovel.inscricaoIptu : imovel.dati;
+    iniciarDivisao(tributo, inscricao, imovel.imovelDeRateio || imovel.grupoRateio?.rotuloContabil || '', imovel.formaPgto);
+  }
+
+  // A partir do imóvel de rateio (busca pelo número contábil) - jeito
+  // preferido de mexer nisso, sem precisar abrir um "I" específico primeiro.
+  function abrirDivisaoRateio(grp) {
+    const primeiro = grp.imoveis[0];
+    const tributo = primeiro && primeiro.inscricaoIptu === grp.inscricao ? 'IPTU' : 'DATI';
+    iniciarDivisao(tributo, grp.inscricao, grupoRateio?.rotuloContabil || '');
   }
 
   function fecharDivisao() {
@@ -311,7 +330,8 @@ export default function Consulta() {
 
   function trocarTributoDivisao(tributo) {
     setTributoDivisao(tributo);
-    carregarMembrosDivisao(tributo);
+    const inscricao = imovel ? (tributo === 'IPTU' ? imovel.inscricaoIptu : imovel.dati) : inscricaoDivisao;
+    carregarMembrosDivisao(inscricao);
   }
 
   function atualizarMembroDivisao(key, campos) {
@@ -320,6 +340,42 @@ export default function Consulta() {
 
   function aplicarQuemPagaDivisaoTodos(valor) {
     setMembrosDivisao((prev) => prev.map((m) => ({ ...m, quemPaga: valor })));
+  }
+
+  // Tira uma linha da divisão desta vez (não mexe na planilha - só nesse
+  // rascunho) - ex: unidade vazia esse mês, não deve entrar na conta.
+  // "Dividir igualmente" usa a quantidade de linhas que sobrar, então
+  // remover/adicionar aqui é como aumentar ou diminuir o divisor.
+  function removerMembroDivisao(key) {
+    setMembrosDivisao((prev) => prev.filter((m) => m.key !== key));
+  }
+
+  // Adiciona uma linha "I" à divisão - busca os dados pra prefilar se já
+  // existir na planilha (mesmo que não compartilhe essa inscrição hoje).
+  async function adicionarMembroDivisao(codigoStr) {
+    const codigo = codigoStr.trim();
+    if (!codigo) return;
+    if (membrosDivisao.some((m) => m.codigo === codigo)) return;
+    try {
+      const { data } = await api.get(`/imoveis/${encodeURIComponent(codigo)}`);
+      setMembrosDivisao((prev) => [
+        ...prev,
+        membroDivisaoVazio({
+          codigo,
+          inscricaoIptu: data.inscricaoIptu || '',
+          dati: data.dati || '',
+          proprietario: data.proprietario || '',
+          nominalIptu: data.nominalIptu || '',
+          obs: data.obs || '',
+        }),
+      ]);
+    } catch (err) {
+      if (err?.response?.status === 404) {
+        setMembrosDivisao((prev) => [...prev, membroDivisaoVazio({ codigo })]);
+      } else {
+        setError(apiErrorMessage(err));
+      }
+    }
   }
 
   function dividirValorIgualmente() {
@@ -392,7 +448,11 @@ export default function Consulta() {
         setError(`Algumas linhas falharam: ${falhas.map((f) => `I ${f.codigo} (${f.mensagem})`).join('; ')}`);
       }
       fecharDivisao();
-      await abrirImovel(imovel.codigo, imovel.inscricaoIptu || imovel.dati);
+      if (imovel) {
+        await abrirImovel(imovel.codigo, imovel.inscricaoIptu || imovel.dati);
+      } else {
+        await buscar();
+      }
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {
@@ -417,134 +477,48 @@ export default function Consulta() {
 
       {error && <div className="error">{error}</div>}
 
-      {grupoRateio && !imovel && (
+      {dividindo && (
         <div className="card destaque">
-          <h4>Imóvel de rateio {grupoRateio.rotuloContabil}</h4>
-          <p className="meta">
-            {grupoRateio.totalImoveis} linha(s) em {grupoRateio.porInscricao.length} inscrição(ões) — não é código
-            "I", é o número usado no sistema contábil.
-          </p>
-          {!inscricaoRateio ? (
-            <ul className="resumo-list">
-              {grupoRateio.porInscricao.map((grp) => (
-                <li key={grp.inscricao || 'sem-inscricao'}>
-                  <button className="choice-item" onClick={() => setInscricaoRateio(grp)}>
-                    Inscrição {grp.inscricao || '(sem inscrição)'} — {grp.imoveis.map((m) => `I ${m.codigo}`).join(', ')}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <>
-              {grupoRateio.porInscricao.length > 1 && (
-                <button className="link-btn" onClick={() => setInscricaoRateio(null)}>
-                  ← outras inscrições deste rateio
-                </button>
-              )}
-              <p className="meta">Imóveis da inscrição {inscricaoRateio.inscricao}:</p>
-              <ul className="resumo-list">
-                {inscricaoRateio.imoveis.map((m, i) => (
-                  <li key={`${m.codigo}-${i}`}>
-                    <button
-                      className="choice-item"
-                      onClick={() => abrirImovel(m.codigo, m.inscricaoIptu || m.dati)}
-                    >
-                      I {m.codigo} — {m.nominalIptu || m.proprietario}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </div>
-      )}
-
-      {resultados.length > 1 && !imovel && (
-        <div className="card">
-          <h4>{resultados.length} resultado(s)</h4>
-          <ul className="resumo-list">
-            {resultados.map((r, i) => (
-              <li key={`${r.codigo}-${r.inscricaoIptu || r.dati || i}`}>
-                <button
-                  className="choice-item"
-                  onClick={() => abrirImovel(r.codigo, r.inscricaoIptu || r.dati)}
-                >
-                  <strong>I {r.codigo || '(sem código)'}</strong> — {r.proprietario} ({r.inscricaoIptu || 'sem inscrição'})
-                  {r.obs && <span className="meta"> — {r.obs}</span>}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {imovel && !editando && (
-        <div className="resultado">
           <div className="iptu-header">
-            <h3>Imóvel I {imovel.codigo || '(sem código)'} — {imovel.proprietario}</h3>
-            {!modoLeitura && (
-              <div>
-                <button className="link-btn" onClick={iniciarEdicao}>
-                  Editar
-                </button>{' '}
-                {(imovel.inscricaoIptu || imovel.dati) && (
-                  <>
-                    <button className="link-btn" onClick={abrirDivisao}>
-                      Dividir rateio desta inscrição
-                    </button>{' '}
-                  </>
-                )}
-                <button className="link-btn link-btn-perigo" onClick={excluirImovel}>
-                  Excluir imóvel
-                </button>
-              </div>
-            )}
+            <h4>Dividir/agrupar rateio — inscrição {inscricaoDivisao}</h4>
+            <button type="button" className="link-btn" onClick={fecharDivisao}>
+              Cancelar
+            </button>
           </div>
-          {imovel.nominalIptu && (
-            <p className="meta">Nome no carnê: {imovel.nominalIptu}</p>
+          <p className="meta">
+            Junta todas as linhas "I" que têm essa mesma inscrição num imóvel de rateio e grava o valor de cada
+            uma de uma vez — sem precisar re-lançar o carnê pelo assistente de Lançar.
+          </p>
+
+          {imovel && imovel.inscricaoIptu && imovel.dati && (
+            <div className="choice-row">
+              <button className={tributoDivisao === 'IPTU' ? '' : 'link-btn'} onClick={() => trocarTributoDivisao('IPTU')}>
+                IPTU
+              </button>
+              <button className={tributoDivisao === 'DATI' ? '' : 'link-btn'} onClick={() => trocarTributoDivisao('DATI')}>
+                DATI
+              </button>
+            </div>
           )}
-          {imovel.obs && <p className="obs-destaque">OBS: {imovel.obs}</p>}
 
-          {dividindo && (
-            <div className="card destaque">
-              <div className="iptu-header">
-                <h4>Dividir/agrupar rateio — inscrição {tributoDivisao === 'IPTU' ? imovel.inscricaoIptu : imovel.dati}</h4>
-                <button type="button" className="link-btn" onClick={fecharDivisao}>
-                  Cancelar
-                </button>
-              </div>
-              <p className="meta">
-                Junta todas as linhas "I" que têm essa mesma inscrição num imóvel de rateio e grava o valor de
-                cada uma de uma vez — sem precisar re-lançar o carnê pelo assistente de Lançar.
-              </p>
+          <label>
+            Número do imóvel de rateio (o usado no sistema contábil, não é código "I")
+            <input value={rotuloDivisao} onChange={(e) => setRotuloDivisao(e.target.value)} placeholder="ex: 837" />
+          </label>
 
-              {imovel.inscricaoIptu && imovel.dati && (
-                <div className="choice-row">
-                  <button className={tributoDivisao === 'IPTU' ? '' : 'link-btn'} onClick={() => trocarTributoDivisao('IPTU')}>
-                    IPTU
-                  </button>
-                  <button className={tributoDivisao === 'DATI' ? '' : 'link-btn'} onClick={() => trocarTributoDivisao('DATI')}>
-                    DATI
-                  </button>
-                </div>
-              )}
+          <label>
+            Forma de pagamento (aplica a todas as linhas)
+            <select value={formaPgtoDivisao} onChange={(e) => setFormaPgtoDivisao(e.target.value)}>
+              <option value="Cota única">Cota única</option>
+              <option value="Parcelado">Parcelado</option>
+            </select>
+          </label>
 
-              <label>
-                Número do imóvel de rateio (o usado no sistema contábil, não é código "I")
-                <input value={rotuloDivisao} onChange={(e) => setRotuloDivisao(e.target.value)} placeholder="ex: 837" />
-              </label>
+          {carregandoDivisao && <p className="meta">Buscando linhas dessa inscrição...</p>}
 
-              <label>
-                Forma de pagamento (aplica a todas as linhas)
-                <select value={formaPgtoDivisao} onChange={(e) => setFormaPgtoDivisao(e.target.value)}>
-                  <option value="Cota única">Cota única</option>
-                  <option value="Parcelado">Parcelado</option>
-                </select>
-              </label>
-
-              {carregandoDivisao && <p className="meta">Buscando linhas dessa inscrição...</p>}
-
-              {!carregandoDivisao && membrosDivisao.length > 0 && (
+          {!carregandoDivisao && (
+            <>
+              {membrosDivisao.length > 0 && (
                 <>
                   <label>
                     Quem paga (aplica a todas as linhas)
@@ -576,6 +550,9 @@ export default function Consulta() {
                     {membrosDivisao.map((m) => (
                       <li key={m.key} className="card">
                         <strong>I {m.codigo}</strong> — {m.nominalIptu || m.proprietario || 'sem nome'}
+                        <button type="button" className="link-btn" onClick={() => removerMembroDivisao(m.key)}>
+                          remover desta divisão
+                        </button>
                         <label>
                           Proprietário
                           <input
@@ -641,31 +618,142 @@ export default function Consulta() {
                       </li>
                     ))}
                   </ul>
-
-                  {pendenciasDivisao().length > 0 && (
-                    <p className="meta">Falta pra salvar: {pendenciasDivisao().join(' · ')}</p>
-                  )}
-
-                  <div className="actions-row">
-                    <button type="button" className="link-btn" onClick={fecharDivisao} disabled={salvandoDivisao}>
-                      Cancelar
-                    </button>
-                    <button
-                      type="button"
-                      disabled={pendenciasDivisao().length > 0 || salvandoDivisao}
-                      onClick={confirmarDivisao}
-                    >
-                      {salvandoDivisao ? 'Salvando...' : `Salvar rateio (${membrosDivisao.length} linhas)`}
-                    </button>
-                  </div>
                 </>
               )}
 
-              {!carregandoDivisao && membrosDivisao.length === 0 && (
-                <p className="meta">Nenhuma outra linha com código "I" encontrada pra essa inscrição.</p>
+              <label>
+                Adicionar linha "I" à divisão (aumenta o divisor)
+                <input
+                  placeholder="código, aperte Enter"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      adicionarMembroDivisao(e.currentTarget.value);
+                      e.currentTarget.value = '';
+                    }
+                  }}
+                />
+              </label>
+
+              {membrosDivisao.length === 0 && (
+                <p className="meta">
+                  Nenhuma linha com código "I" nessa divisão ainda — adicione pelo campo acima.
+                </p>
               )}
-            </div>
+
+              {pendenciasDivisao().length > 0 && (
+                <p className="meta">Falta pra salvar: {pendenciasDivisao().join(' · ')}</p>
+              )}
+
+              <div className="actions-row">
+                <button type="button" className="link-btn" onClick={fecharDivisao} disabled={salvandoDivisao}>
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={pendenciasDivisao().length > 0 || salvandoDivisao}
+                  onClick={confirmarDivisao}
+                >
+                  {salvandoDivisao ? 'Salvando...' : `Salvar rateio (${membrosDivisao.length} linhas)`}
+                </button>
+              </div>
+            </>
           )}
+        </div>
+      )}
+
+      {grupoRateio && !imovel && !dividindo && (
+        <div className="card destaque">
+          <h4>Imóvel de rateio {grupoRateio.rotuloContabil}</h4>
+          <p className="meta">
+            {grupoRateio.totalImoveis} linha(s) em {grupoRateio.porInscricao.length} inscrição(ões) — não é código
+            "I", é o número usado no sistema contábil.
+          </p>
+          {!inscricaoRateio ? (
+            <ul className="resumo-list">
+              {grupoRateio.porInscricao.map((grp) => (
+                <li key={grp.inscricao || 'sem-inscricao'}>
+                  <button className="choice-item" onClick={() => setInscricaoRateio(grp)}>
+                    Inscrição {grp.inscricao || '(sem inscrição)'} — {grp.imoveis.map((m) => `I ${m.codigo}`).join(', ')}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <>
+              {grupoRateio.porInscricao.length > 1 && (
+                <button className="link-btn" onClick={() => setInscricaoRateio(null)}>
+                  ← outras inscrições deste rateio
+                </button>
+              )}
+              <p className="meta">Imóveis da inscrição {inscricaoRateio.inscricao}:</p>
+              {!modoLeitura && (
+                <button type="button" className="link-btn" onClick={() => abrirDivisaoRateio(inscricaoRateio)}>
+                  Dividir/editar valores desta inscrição
+                </button>
+              )}
+              <ul className="resumo-list">
+                {inscricaoRateio.imoveis.map((m, i) => (
+                  <li key={`${m.codigo}-${i}`}>
+                    <button
+                      className="choice-item"
+                      onClick={() => abrirImovel(m.codigo, m.inscricaoIptu || m.dati)}
+                    >
+                      I {m.codigo} — {m.nominalIptu || m.proprietario}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
+
+      {resultados.length > 1 && !imovel && !dividindo && (
+        <div className="card">
+          <h4>{resultados.length} resultado(s)</h4>
+          <ul className="resumo-list">
+            {resultados.map((r, i) => (
+              <li key={`${r.codigo}-${r.inscricaoIptu || r.dati || i}`}>
+                <button
+                  className="choice-item"
+                  onClick={() => abrirImovel(r.codigo, r.inscricaoIptu || r.dati)}
+                >
+                  <strong>I {r.codigo || '(sem código)'}</strong> — {r.proprietario} ({r.inscricaoIptu || 'sem inscrição'})
+                  {r.obs && <span className="meta"> — {r.obs}</span>}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {imovel && !editando && !dividindo && (
+        <div className="resultado">
+          <div className="iptu-header">
+            <h3>Imóvel I {imovel.codigo || '(sem código)'} — {imovel.proprietario}</h3>
+            {!modoLeitura && (
+              <div>
+                <button className="link-btn" onClick={iniciarEdicao}>
+                  Editar
+                </button>{' '}
+                {(imovel.inscricaoIptu || imovel.dati) && (
+                  <>
+                    <button className="link-btn" onClick={abrirDivisao}>
+                      Dividir rateio desta inscrição
+                    </button>{' '}
+                  </>
+                )}
+                <button className="link-btn link-btn-perigo" onClick={excluirImovel}>
+                  Excluir imóvel
+                </button>
+              </div>
+            )}
+          </div>
+          {imovel.nominalIptu && (
+            <p className="meta">Nome no carnê: {imovel.nominalIptu}</p>
+          )}
+          {imovel.obs && <p className="obs-destaque">OBS: {imovel.obs}</p>}
 
           <div className="card">
             <h4>IPTU</h4>

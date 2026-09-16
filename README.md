@@ -104,12 +104,20 @@ instalar assim que a atualização estiver pronta.
    "I"), mostra um card com o valor de cada linha do grupo e o total
    consolidado a lançar, com um botão pra **remover uma linha do grupo**
    (não mexe nos valores já lançados, só tira o rótulo). O botão
-   **"Dividir rateio desta inscrição"** junta todas as linhas "I" que
-   compartilham a mesma inscrição num rateio e grava o valor de cada uma
-   de uma vez — sem precisar re-enviar o PDF pelo assistente de Lançar;
-   útil tanto pra ajustar uma divisão existente quanto pra agrupar linhas
-   que nunca tinham sido marcadas como rateio (situação comum em dados
-   antigos, de antes do app existir). O botão **"Excluir imóvel"** limpa todos os
+   **"Dividir/editar valores desta inscrição"** junta todas as linhas "I"
+   que compartilham a mesma inscrição num rateio e grava o valor de cada
+   uma de uma vez — sem precisar re-enviar o PDF pelo assistente de
+   Lançar; útil tanto pra ajustar uma divisão existente quanto pra
+   agrupar linhas que nunca tinham sido marcadas como rateio (situação
+   comum em dados antigos, de antes do app existir). Fica disponível de
+   dois jeitos: a partir de um "I" específico (usa a inscrição dele), ou
+   — preferível — buscando direto pelo **número do imóvel de rateio** e
+   escolhendo a inscrição, já que é ele quem "manda" nesses valores, não
+   uma unidade qualquer do grupo. Dentro da divisão dá pra **adicionar ou
+   remover linhas** antes de salvar — é assim que se aumenta ou diminui o
+   divisor quando "dividir igualmente" (ex: uma unidade vazia não deve
+   entrar na conta desse mês, ou faltava incluir uma linha que ainda não
+   tinha essa inscrição cadastrada). O botão **"Excluir imóvel"** limpa todos os
    campos daquela linha (útil pra linha duplicada/errada, ex: uma linha
    órfã de antes do app existir, sem código "I", duplicando uma inscrição
    de outra linha) — não remove a linha fisicamente da tabela (evita ter
