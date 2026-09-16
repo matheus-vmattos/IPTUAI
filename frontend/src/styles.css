@@ -321,6 +321,17 @@ button:disabled {
   color: var(--error);
 }
 
+.obs-destaque {
+  background: var(--warning-bg);
+  color: var(--text);
+  border: 1px solid rgba(255, 200, 87, 0.3);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 0.9rem;
+  margin: 0 0 16px;
+}
+
 .rateio-toggle {
   display: block;
   width: 100%;

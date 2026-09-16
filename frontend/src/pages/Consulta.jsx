@@ -299,6 +299,7 @@ export default function Consulta() {
                   onClick={() => abrirImovel(r.codigo, r.inscricaoIptu || r.dati)}
                 >
                   <strong>I {r.codigo || '(sem código)'}</strong> — {r.proprietario} ({r.inscricaoIptu || 'sem inscrição'})
+                  {r.obs && <span className="meta"> — {r.obs}</span>}
                 </button>
               </li>
             ))}
@@ -324,6 +325,7 @@ export default function Consulta() {
           {imovel.nominalIptu && (
             <p className="meta">Nome no carnê: {imovel.nominalIptu}</p>
           )}
+          {imovel.obs && <p className="obs-destaque">OBS: {imovel.obs}</p>}
 
           <div className="card">
             <h4>IPTU</h4>
@@ -393,7 +395,6 @@ export default function Consulta() {
                 <strong>Valor a pagar: {formatarMoeda(imovel.valorAPagarCalculado)}</strong>
               </li>
               {imovel.imovelDeRateio && <li>Imóvel de rateio: {imovel.imovelDeRateio}</li>}
-              {imovel.obs && <li>OBS: {imovel.obs}</li>}
               {imovel.linkCarne && (
                 <li>
                   Carnê salvo:{' '}
