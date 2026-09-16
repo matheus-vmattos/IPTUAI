@@ -49,6 +49,25 @@ function paraFormulario(imovel) {
   return out;
 }
 
+let proximaChaveDivisao = 1;
+function membroDivisaoVazio(dados) {
+  return {
+    key: proximaChaveDivisao++,
+    codigo: '',
+    inscricaoIptu: '',
+    dati: '',
+    proprietario: '',
+    nominalIptu: '',
+    quemPaga: '',
+    cotaUnica: '',
+    parcela: '',
+    ultimaParcela: '',
+    reajustePct: '',
+    obs: '',
+    ...dados,
+  };
+}
+
 export default function Consulta() {
   const modoLeitura = useModoLeitura();
   const [busca, setBusca] = useState('');
@@ -64,6 +83,18 @@ export default function Consulta() {
 
   const [grupoRateio, setGrupoRateio] = useState(null);
   const [inscricaoRateio, setInscricaoRateio] = useState(null);
+
+  // Divide/agrupa num rateio todas as linhas "I" que compartilham a mesma
+  // inscrição do imóvel aberto - sem precisar re-lançar o carnê pelo
+  // assistente de Lançar (que exige subir o PDF de novo).
+  const [dividindo, setDividindo] = useState(false);
+  const [tributoDivisao, setTributoDivisao] = useState('IPTU');
+  const [rotuloDivisao, setRotuloDivisao] = useState('');
+  const [formaPgtoDivisao, setFormaPgtoDivisao] = useState('Parcelado');
+  const [valorTotalDivisao, setValorTotalDivisao] = useState('');
+  const [membrosDivisao, setMembrosDivisao] = useState([]);
+  const [carregandoDivisao, setCarregandoDivisao] = useState(false);
+  const [salvandoDivisao, setSalvandoDivisao] = useState(false);
 
   const location = useLocation();
 
@@ -229,6 +260,146 @@ export default function Consulta() {
     }
   }
 
+  // Busca todas as linhas com essa inscrição exata (IPTU ou DATI) - linhas
+  // sem código "I" não entram (não dá pra lançar valor nelas; use Editar ou
+  // Excluir pra essas primeiro).
+  async function carregarMembrosDivisao(tributo) {
+    const inscricao = tributo === 'IPTU' ? imovel.inscricaoIptu : imovel.dati;
+    if (!inscricao) {
+      setMembrosDivisao([]);
+      return;
+    }
+    setCarregandoDivisao(true);
+    try {
+      const { data } = await api.get(`/imoveis/por-inscricao/${encodeURIComponent(inscricao)}`);
+      const comCodigo = data.filter((m) => m.codigo);
+      setMembrosDivisao(
+        comCodigo.map((m) =>
+          membroDivisaoVazio({
+            codigo: String(m.codigo),
+            inscricaoIptu: m.inscricaoIptu || '',
+            dati: m.dati || '',
+            proprietario: m.proprietario || '',
+            nominalIptu: m.nominalIptu || '',
+            obs: m.obs || '',
+          })
+        )
+      );
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setCarregandoDivisao(false);
+    }
+  }
+
+  function abrirDivisao() {
+    if (!imovel) return;
+    const tributo = imovel.inscricaoIptu ? 'IPTU' : 'DATI';
+    setTributoDivisao(tributo);
+    setRotuloDivisao(imovel.imovelDeRateio || imovel.grupoRateio?.rotuloContabil || '');
+    setFormaPgtoDivisao(imovel.formaPgto || 'Parcelado');
+    setValorTotalDivisao('');
+    setError('');
+    setDividindo(true);
+    carregarMembrosDivisao(tributo);
+  }
+
+  function fecharDivisao() {
+    setDividindo(false);
+    setMembrosDivisao([]);
+  }
+
+  function trocarTributoDivisao(tributo) {
+    setTributoDivisao(tributo);
+    carregarMembrosDivisao(tributo);
+  }
+
+  function atualizarMembroDivisao(key, campos) {
+    setMembrosDivisao((prev) => prev.map((m) => (m.key === key ? { ...m, ...campos } : m)));
+  }
+
+  function aplicarQuemPagaDivisaoTodos(valor) {
+    setMembrosDivisao((prev) => prev.map((m) => ({ ...m, quemPaga: valor })));
+  }
+
+  function dividirValorIgualmente() {
+    const total = Number(valorTotalDivisao);
+    if (isNaN(total) || membrosDivisao.length === 0) return;
+    const sugestao = Math.round((total / membrosDivisao.length) * 100) / 100;
+    setMembrosDivisao((prev) =>
+      prev.map((m) =>
+        formaPgtoDivisao === 'Cota única' ? { ...m, cotaUnica: String(sugestao) } : { ...m, parcela: String(sugestao) }
+      )
+    );
+  }
+
+  function somaMembrosDivisao() {
+    return membrosDivisao.reduce((acc, m) => {
+      const v = formaPgtoDivisao === 'Cota única' ? Number(m.cotaUnica) : Number(m.parcela);
+      return acc + (isNaN(v) ? 0 : v);
+    }, 0);
+  }
+
+  // Lista em português o que falta pra poder salvar - sem isso o botão só
+  // fica desabilitado sem explicar por quê.
+  function pendenciasDivisao() {
+    const pendencias = [];
+    if (!rotuloDivisao.trim()) pendencias.push('informe o número do imóvel de rateio');
+    if (membrosDivisao.length === 0) pendencias.push('nenhuma linha com código "I" encontrada pra essa inscrição');
+    const semValor = membrosDivisao.filter((m) =>
+      formaPgtoDivisao === 'Cota única' ? m.cotaUnica === '' || isNaN(Number(m.cotaUnica)) : m.parcela === '' || isNaN(Number(m.parcela))
+    );
+    if (semValor.length > 0) pendencias.push(`falta valor em: ${semValor.map((m) => `I ${m.codigo}`).join(', ')}`);
+    const semQuemPaga = membrosDivisao.filter((m) => !m.quemPaga);
+    if (semQuemPaga.length > 0) pendencias.push(`falta "quem paga" em: ${semQuemPaga.map((m) => `I ${m.codigo}`).join(', ')}`);
+    return pendencias;
+  }
+
+  async function confirmarDivisao() {
+    setError('');
+    setSalvandoDivisao(true);
+    try {
+      const form = new FormData();
+      form.append('rotulo', rotuloDivisao.trim());
+      form.append('tributo', tributoDivisao);
+      const itens = membrosDivisao.map((m) => {
+        const it = {
+          codigo: m.codigo.trim(),
+          formaPgto: formaPgtoDivisao,
+          proprietario: m.proprietario || undefined,
+          nominalIptu: m.nominalIptu || undefined,
+          quemPaga: m.quemPaga || undefined,
+          obs: m.obs || undefined,
+        };
+        if (tributoDivisao === 'IPTU') it.inscricaoIptu = m.inscricaoIptu || undefined;
+        if (tributoDivisao === 'DATI') it.dati = m.dati || undefined;
+        if (m.reajustePct !== '') it.reajustePct = m.reajustePct;
+        if (formaPgtoDivisao === 'Cota única') {
+          it.cotaUnica = m.cotaUnica;
+        } else {
+          it.parcela = m.parcela;
+          if (m.ultimaParcela !== '') it.ultimaParcela = m.ultimaParcela;
+        }
+        return it;
+      });
+      form.append('itens', JSON.stringify(itens));
+
+      const { data } = await api.post('/lancamentos/rateio', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const falhas = data.resultados.filter((r) => r.status === 'erro');
+      if (falhas.length > 0) {
+        setError(`Algumas linhas falharam: ${falhas.map((f) => `I ${f.codigo} (${f.mensagem})`).join('; ')}`);
+      }
+      fecharDivisao();
+      await abrirImovel(imovel.codigo, imovel.inscricaoIptu || imovel.dati);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setSalvandoDivisao(false);
+    }
+  }
+
   return (
     <div className="page">
       <h2>Consultar imóvel</h2>
@@ -316,6 +487,13 @@ export default function Consulta() {
                 <button className="link-btn" onClick={iniciarEdicao}>
                   Editar
                 </button>{' '}
+                {(imovel.inscricaoIptu || imovel.dati) && (
+                  <>
+                    <button className="link-btn" onClick={abrirDivisao}>
+                      Dividir rateio desta inscrição
+                    </button>{' '}
+                  </>
+                )}
                 <button className="link-btn link-btn-perigo" onClick={excluirImovel}>
                   Excluir imóvel
                 </button>
@@ -326,6 +504,168 @@ export default function Consulta() {
             <p className="meta">Nome no carnê: {imovel.nominalIptu}</p>
           )}
           {imovel.obs && <p className="obs-destaque">OBS: {imovel.obs}</p>}
+
+          {dividindo && (
+            <div className="card destaque">
+              <div className="iptu-header">
+                <h4>Dividir/agrupar rateio — inscrição {tributoDivisao === 'IPTU' ? imovel.inscricaoIptu : imovel.dati}</h4>
+                <button type="button" className="link-btn" onClick={fecharDivisao}>
+                  Cancelar
+                </button>
+              </div>
+              <p className="meta">
+                Junta todas as linhas "I" que têm essa mesma inscrição num imóvel de rateio e grava o valor de
+                cada uma de uma vez — sem precisar re-lançar o carnê pelo assistente de Lançar.
+              </p>
+
+              {imovel.inscricaoIptu && imovel.dati && (
+                <div className="choice-row">
+                  <button className={tributoDivisao === 'IPTU' ? '' : 'link-btn'} onClick={() => trocarTributoDivisao('IPTU')}>
+                    IPTU
+                  </button>
+                  <button className={tributoDivisao === 'DATI' ? '' : 'link-btn'} onClick={() => trocarTributoDivisao('DATI')}>
+                    DATI
+                  </button>
+                </div>
+              )}
+
+              <label>
+                Número do imóvel de rateio (o usado no sistema contábil, não é código "I")
+                <input value={rotuloDivisao} onChange={(e) => setRotuloDivisao(e.target.value)} placeholder="ex: 837" />
+              </label>
+
+              <label>
+                Forma de pagamento (aplica a todas as linhas)
+                <select value={formaPgtoDivisao} onChange={(e) => setFormaPgtoDivisao(e.target.value)}>
+                  <option value="Cota única">Cota única</option>
+                  <option value="Parcelado">Parcelado</option>
+                </select>
+              </label>
+
+              {carregandoDivisao && <p className="meta">Buscando linhas dessa inscrição...</p>}
+
+              {!carregandoDivisao && membrosDivisao.length > 0 && (
+                <>
+                  <label>
+                    Quem paga (aplica a todas as linhas)
+                    <select value="" onChange={(e) => e.target.value && aplicarQuemPagaDivisaoTodos(e.target.value)}>
+                      <option value="">— escolher pra todas —</option>
+                      {(config?.listas?.quemPagaOpcoes || []).map((op) => (
+                        <option key={op} value={op}>
+                          {op}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    Valor total do carnê (referência pra dividir igualmente)
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={valorTotalDivisao}
+                      onChange={(e) => setValorTotalDivisao(e.target.value)}
+                    />
+                  </label>
+                  <button type="button" className="link-btn" onClick={dividirValorIgualmente} disabled={!valorTotalDivisao}>
+                    Dividir igualmente entre as {membrosDivisao.length} linhas
+                  </button>
+                  <p className="meta">Soma das linhas abaixo: {formatarMoeda(somaMembrosDivisao())}</p>
+
+                  <ul className="resumo-list">
+                    {membrosDivisao.map((m) => (
+                      <li key={m.key} className="card">
+                        <strong>I {m.codigo}</strong> — {m.nominalIptu || m.proprietario || 'sem nome'}
+                        <label>
+                          Proprietário
+                          <input
+                            value={m.proprietario}
+                            onChange={(e) => atualizarMembroDivisao(m.key, { proprietario: e.target.value })}
+                          />
+                        </label>
+                        <label>
+                          Quem paga
+                          <select
+                            value={m.quemPaga}
+                            onChange={(e) => atualizarMembroDivisao(m.key, { quemPaga: e.target.value })}
+                          >
+                            <option value="">—</option>
+                            {(config?.listas?.quemPagaOpcoes || []).map((op) => (
+                              <option key={op} value={op}>
+                                {op}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        {formaPgtoDivisao === 'Cota única' ? (
+                          <label>
+                            Valor desta linha (R$)
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={m.cotaUnica}
+                              onChange={(e) => atualizarMembroDivisao(m.key, { cotaUnica: e.target.value })}
+                            />
+                          </label>
+                        ) : (
+                          <>
+                            <label>
+                              Parcela desta linha (R$)
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={m.parcela}
+                                onChange={(e) => atualizarMembroDivisao(m.key, { parcela: e.target.value })}
+                              />
+                            </label>
+                            <label>
+                              Última parcela (R$, deixe em branco se igual)
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={m.ultimaParcela}
+                                onChange={(e) => atualizarMembroDivisao(m.key, { ultimaParcela: e.target.value })}
+                              />
+                            </label>
+                          </>
+                        )}
+                        <label>
+                          % de reajuste (provisão pro próximo exercício)
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={m.reajustePct}
+                            onChange={(e) => atualizarMembroDivisao(m.key, { reajustePct: e.target.value })}
+                          />
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {pendenciasDivisao().length > 0 && (
+                    <p className="meta">Falta pra salvar: {pendenciasDivisao().join(' · ')}</p>
+                  )}
+
+                  <div className="actions-row">
+                    <button type="button" className="link-btn" onClick={fecharDivisao} disabled={salvandoDivisao}>
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pendenciasDivisao().length > 0 || salvandoDivisao}
+                      onClick={confirmarDivisao}
+                    >
+                      {salvandoDivisao ? 'Salvando...' : `Salvar rateio (${membrosDivisao.length} linhas)`}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {!carregandoDivisao && membrosDivisao.length === 0 && (
+                <p className="meta">Nenhuma outra linha com código "I" encontrada pra essa inscrição.</p>
+              )}
+            </div>
+          )}
 
           <div className="card">
             <h4>IPTU</h4>
@@ -455,9 +795,9 @@ export default function Consulta() {
                 ))}
               </ul>
               <p className="meta">
-                Pra ajustar a divisão ou trocar o carnê, use "Lançar" de novo informando o número{' '}
-                {imovel.grupoRateio.rotuloContabil} como imóvel de rateio — as linhas já aparecem prontas pra
-                editar.
+                Pra ajustar a divisão sem re-enviar o PDF, use "Dividir rateio desta inscrição" no topo da tela. Pra
+                trocar o carnê, use "Lançar" de novo informando o número {imovel.grupoRateio.rotuloContabil} como
+                imóvel de rateio.
               </p>
             </div>
           )}

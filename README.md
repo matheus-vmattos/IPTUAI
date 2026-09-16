@@ -103,9 +103,13 @@ instalar assim que a atualização estiver pronta.
    usado no sistema contábil pra cobrar o proprietário, não um código
    "I"), mostra um card com o valor de cada linha do grupo e o total
    consolidado a lançar, com um botão pra **remover uma linha do grupo**
-   (não mexe nos valores já lançados, só tira o rótulo). Pra ajustar a
-   divisão ou trocar o carnê, é só lançar de novo em "Lançar" informando
-   o mesmo número de rateio. O botão **"Excluir imóvel"** limpa todos os
+   (não mexe nos valores já lançados, só tira o rótulo). O botão
+   **"Dividir rateio desta inscrição"** junta todas as linhas "I" que
+   compartilham a mesma inscrição num rateio e grava o valor de cada uma
+   de uma vez — sem precisar re-enviar o PDF pelo assistente de Lançar;
+   útil tanto pra ajustar uma divisão existente quanto pra agrupar linhas
+   que nunca tinham sido marcadas como rateio (situação comum em dados
+   antigos, de antes do app existir). O botão **"Excluir imóvel"** limpa todos os
    campos daquela linha (útil pra linha duplicada/errada, ex: uma linha
    órfã de antes do app existir, sem código "I", duplicando uma inscrição
    de outra linha) — não remove a linha fisicamente da tabela (evita ter

@@ -22,6 +22,18 @@ router.get(
   })
 );
 
+// Todas as linhas com essa inscricao exata (IPTU ou DATI) - usado pra
+// montar/editar um rateio direto em Consultar sem precisar re-lancar o
+// carne pelo assistente de Lancar. Precisa vir antes de "/:codigo" (senao
+// "por-inscricao" seria interpretado como um codigo).
+router.get(
+  '/por-inscricao/:inscricao',
+  asyncHandler(async (req, res) => {
+    const imoveis = await excelStore.buscarPorInscricao(req.params.inscricao);
+    res.json(imoveis);
+  })
+);
+
 // Codigo "I" normalmente e unico, mas a planilha real tem casos de um
 // mesmo codigo em varias linhas (ex: um "I" com mais de uma
 // inscricao/guia de IPTU) - nesse caso o backend devolve 409 com a lista

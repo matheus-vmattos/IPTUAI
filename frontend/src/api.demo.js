@@ -168,6 +168,13 @@ let DB = [
     quemPagaIptu: 'Não cobrar / isento',
   }),
   linhaBase({ codigo: '502', proprietario: 'Rita Nascimento', inscricaoIptu: '50002-2' }),
+  // Inscrição compartilhada por várias unidades, mas nunca marcada como
+  // imóvel de rateio (igual um caso real encontrado em produção) - serve
+  // pra demonstrar o botão "Dividir rateio desta inscrição" em Consultar.
+  linhaBase({ codigo: '601', proprietario: 'Edifício Vitória', inscricaoIptu: '70001-1', obs: 'Síndica Marta' }),
+  linhaBase({ codigo: '602', proprietario: 'Edifício Vitória', inscricaoIptu: '70001-1', obs: 'Síndica Marta' }),
+  linhaBase({ codigo: '603', proprietario: 'Edifício Vitória', inscricaoIptu: '70001-1', obs: 'Síndica Marta' }),
+  linhaBase({ codigo: '604', proprietario: 'Edifício Vitória', inscricaoIptu: '70001-1', obs: 'Síndica Marta' }),
 ];
 
 function totalCalculado(cotaUnica, parcela, ultimaParcela, formaPgto) {
@@ -445,6 +452,13 @@ function handle(method, url, body, config) {
         (r.inscricaoIptu || '').toLowerCase().includes(alvo) ||
         (r.dati || '').toLowerCase().includes(alvo)
     ).map(candidatoShape);
+  }
+  if (method === 'GET' && parts[0] === 'imoveis' && parts[1] === 'por-inscricao' && parts.length === 3) {
+    const alvo = parts[2];
+    return DB.filter((r) => r.inscricaoIptu === alvo || r.dati === alvo).map((r) => ({
+      ...candidatoShape(r),
+      tributoQueBateu: r.inscricaoIptu === alvo && r.dati === alvo ? 'IPTU/DATI' : r.inscricaoIptu === alvo ? 'IPTU' : 'DATI',
+    }));
   }
   if (method === 'GET' && parts[0] === 'imoveis' && parts.length === 2) {
     const row = encontrarLinha(parts[1], params.inscricao);
