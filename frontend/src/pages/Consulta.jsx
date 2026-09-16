@@ -93,6 +93,10 @@ export default function Consulta() {
   const [rotuloDivisao, setRotuloDivisao] = useState('');
   const [formaPgtoDivisao, setFormaPgtoDivisao] = useState('Parcelado');
   const [valorTotalDivisao, setValorTotalDivisao] = useState('');
+  // Separado da quantidade de linhas: o número real de partes pode ser
+  // diferente de quantas linhas "I" já estão cadastradas nessa inscrição
+  // (ex: prédio tem 16 frações mas só 12 unidades com código "I" hoje).
+  const [divisorDivisao, setDivisorDivisao] = useState('');
   const [membrosDivisao, setMembrosDivisao] = useState([]);
   const [carregandoDivisao, setCarregandoDivisao] = useState(false);
   const [salvandoDivisao, setSalvandoDivisao] = useState(false);
@@ -285,6 +289,7 @@ export default function Consulta() {
           })
         )
       );
+      setDivisorDivisao(String(comCodigo.length || ''));
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {
@@ -380,8 +385,9 @@ export default function Consulta() {
 
   function dividirValorIgualmente() {
     const total = Number(valorTotalDivisao);
-    if (isNaN(total) || membrosDivisao.length === 0) return;
-    const sugestao = Math.round((total / membrosDivisao.length) * 100) / 100;
+    const divisor = Number(divisorDivisao) || membrosDivisao.length;
+    if (isNaN(total) || !divisor || membrosDivisao.length === 0) return;
+    const sugestao = Math.round((total / divisor) * 100) / 100;
     setMembrosDivisao((prev) =>
       prev.map((m) =>
         formaPgtoDivisao === 'Cota única' ? { ...m, cotaUnica: String(sugestao) } : { ...m, parcela: String(sugestao) }
@@ -541,8 +547,21 @@ export default function Consulta() {
                       onChange={(e) => setValorTotalDivisao(e.target.value)}
                     />
                   </label>
+                  <label>
+                    Dividir por quantas partes
+                    <input
+                      type="number"
+                      step="1"
+                      value={divisorDivisao}
+                      onChange={(e) => setDivisorDivisao(e.target.value)}
+                    />
+                  </label>
+                  <p className="meta">
+                    Por padrão é a quantidade de linhas ({membrosDivisao.length}), mas pode ser diferente — ex: o
+                    imóvel tem mais frações do que "I"s cadastrados hoje.
+                  </p>
                   <button type="button" className="link-btn" onClick={dividirValorIgualmente} disabled={!valorTotalDivisao}>
-                    Dividir igualmente entre as {membrosDivisao.length} linhas
+                    Dividir igualmente (÷ {divisorDivisao || membrosDivisao.length})
                   </button>
                   <p className="meta">Soma das linhas abaixo: {formatarMoeda(somaMembrosDivisao())}</p>
 

@@ -114,10 +114,13 @@ instalar assim que a atualização estiver pronta.
    — preferível — buscando direto pelo **número do imóvel de rateio** e
    escolhendo a inscrição, já que é ele quem "manda" nesses valores, não
    uma unidade qualquer do grupo. Dentro da divisão dá pra **adicionar ou
-   remover linhas** antes de salvar — é assim que se aumenta ou diminui o
-   divisor quando "dividir igualmente" (ex: uma unidade vazia não deve
-   entrar na conta desse mês, ou faltava incluir uma linha que ainda não
-   tinha essa inscrição cadastrada). O botão **"Excluir imóvel"** limpa todos os
+   remover linhas** antes de salvar (ex: uma unidade vazia não deve entrar
+   na conta desse mês, ou faltava incluir uma linha que ainda não tinha
+   essa inscrição cadastrada), e o campo **"Dividir por quantas partes"**
+   controla o divisor de "dividir igualmente" de forma independente da
+   quantidade de linhas — útil quando o número real de frações não bate
+   com quantos "I" já estão cadastrados hoje (ex: 12 linhas na planilha
+   mas o valor tem que ser dividido por 16). O botão **"Excluir imóvel"** limpa todos os
    campos daquela linha (útil pra linha duplicada/errada, ex: uma linha
    órfã de antes do app existir, sem código "I", duplicando uma inscrição
    de outra linha) — não remove a linha fisicamente da tabela (evita ter
