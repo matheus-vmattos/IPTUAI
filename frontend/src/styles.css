@@ -321,6 +321,14 @@ button:disabled {
   color: var(--error);
 }
 
+.rateio-toggle {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-size: 0.95rem;
+  padding: 4px 0;
+}
+
 .choice-row {
   display: flex;
   gap: 10px;

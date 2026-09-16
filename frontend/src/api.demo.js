@@ -488,6 +488,16 @@ function handle(method, url, body, config) {
       pendentesDati: DB.filter((r) => r.dati && r.datiLancado !== 'Feito').map(candidatoShape),
     };
   }
+  if (method === 'GET' && parts[0] === 'provisao') {
+    const comItem = (r) => ({ ...candidatoShape(r) });
+    return {
+      comProvisaoIptu: DB.filter((r) => r.inscricaoIptu && r.iptuProvisaoProximoAno != null).map(comItem),
+      semProvisaoIptu: DB.filter((r) => r.inscricaoIptu && r.iptuProvisaoProximoAno == null).map(comItem),
+      comProvisaoDati: DB.filter((r) => r.dati && r.datiProvisaoProximoAno != null).map(comItem),
+      semProvisaoDati: DB.filter((r) => r.dati && r.datiProvisaoProximoAno == null).map(comItem),
+      proximoExercicio: LISTAS.exercicio + 1,
+    };
+  }
   if (method === 'GET' && parts[0] === 'proprietarios' && parts.length === 1) {
     const alvo = (params.q || '').trim().toLowerCase();
     const nomes = [...new Set(DB.map((r) => r.proprietario).filter(Boolean))];

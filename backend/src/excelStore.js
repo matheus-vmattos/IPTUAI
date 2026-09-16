@@ -501,6 +501,59 @@ async function listarPendencias() {
   return { pendentesIptu, pendentesDati };
 }
 
+// Separa os imoveis (com inscricao real de IPTU/DATI) entre quem ja tem
+// provisao calculada pro proximo exercicio e quem ainda nao - util pra
+// acompanhar o quanto falta provisionar pro ano que vem, independente do
+// que ja foi lancado de verdade no exercicio atual (ver listarPendencias).
+async function listarProvisao() {
+  const xlsxPath = await requireXlsxPath();
+  const zip = await loadZip(xlsxPath);
+  const sheetXml = await zip.file(SHEET_PATH).async('string');
+  const sharedStringsXml = await zip.file(SHARED_STRINGS_PATH).async('string');
+  const sharedStrings = parseSharedStrings(sharedStringsXml);
+  const { rows, maxRow } = indexRows(sheetXml);
+  const { cellAt } = await loadListasRaw(zip);
+  const exercicioAtual = Number(cellAt(4, 'B'));
+  const proximoExercicio = Number.isInteger(exercicioAtual) ? exercicioAtual + 1 : null;
+
+  const comProvisaoIptu = [];
+  const semProvisaoIptu = [];
+  const comProvisaoDati = [];
+  const semProvisaoDati = [];
+  for (let r = 2; r <= maxRow; r++) {
+    const info = rows.get(r);
+    if (!info) continue;
+    const f = fieldsOfRow(info.xml, sharedStrings);
+    if (f.codigo === null && !f.proprietario) continue;
+
+    if (temValorReal(f.inscricaoIptu)) {
+      const item = {
+        codigo: f.codigo,
+        proprietario: f.proprietario,
+        nominalIptu: f.nominalIptu,
+        inscricaoIptu: f.inscricaoIptu,
+        imovelDeRateio: f.imovelDeRateio,
+        obs: f.obs,
+        provisao: f.iptuProvisaoProximoAno,
+      };
+      (f.iptuProvisaoProximoAno != null ? comProvisaoIptu : semProvisaoIptu).push(item);
+    }
+    if (temValorReal(f.dati)) {
+      const item = {
+        codigo: f.codigo,
+        proprietario: f.proprietario,
+        nominalIptu: f.nominalIptu,
+        dati: f.dati,
+        imovelDeRateio: f.imovelDeRateio,
+        obs: f.obs,
+        provisao: f.datiProvisaoProximoAno,
+      };
+      (f.datiProvisaoProximoAno != null ? comProvisaoDati : semProvisaoDati).push(item);
+    }
+  }
+  return { comProvisaoIptu, semProvisaoIptu, comProvisaoDati, semProvisaoDati, proximoExercicio };
+}
+
 async function getImovel(codigo, inscricao) {
   const xlsxPath = await requireXlsxPath();
   const zip = await loadZip(xlsxPath);
@@ -1172,4 +1225,5 @@ module.exports = {
   listarGruposDeRateio,
   getGrupoDeRateio,
   listarPendencias,
+  listarProvisao,
 };

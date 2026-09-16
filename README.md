@@ -145,11 +145,20 @@ instalar assim que a atualização estiver pronta.
    o valor real — total e também **parcela a parcela**, pra você saber
    exatamente quanto devolver ou cobrar a mais em cada parcela, sem
    precisar guardar isso em outro lugar.
-10. **Painel**: visão geral pra entender onde lançar um carnê — lista todos
-   os imóveis de rateio já usados (com as linhas de cada um) pra
-   reconhecer rápido qual é qual, e as pendências do exercício (imóveis
-   ainda sem carnê lançado, separado por IPTU/DATI). Clicar num item leva
-   direto pra tela de Consultar daquele imóvel.
+10. **Painel**: visão geral pra entender onde lançar um carnê.
+    - **Imóveis de rateio**: lista todos os já usados, cada um colapsado por
+      padrão — clique na seta (▸/▾) pra ver as linhas "I" daquele grupo (ou
+      filtre por número/código/nome, que abre sozinho os que baterem).
+    - **Pendências do exercício**: imóveis ainda sem carnê lançado nesse
+      exercício, separado por IPTU/DATI, com filtro por nome ou código "I"
+      e paginação (15 por página).
+    - **Provisão pro próximo exercício**: com as mesmas abas IPTU/DATI, um
+      segundo filtro separa quem já tem valor provisório calculado pro
+      próximo ano de quem ainda não tem — útil pra acompanhar o quanto
+      falta provisionar, independente do que já foi lançado de verdade
+      neste exercício.
+    Clicar num item de qualquer lista leva direto pra tela de Consultar
+    daquele imóvel.
 
 ## Extração automática de valores
 
