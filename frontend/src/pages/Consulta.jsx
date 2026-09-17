@@ -49,6 +49,160 @@ function paraFormulario(imovel) {
   return out;
 }
 
+// Form compacto de "adicionar imóvel a este rateio" - usado tanto na busca
+// direta pelo número do rateio quanto dentro de um "I" que já é membro de
+// um. Cadastra e já lança o tributo na mesma ação (POST /lancamentos com
+// imovelDeRateio forçado pro rótulo do grupo).
+function NovoMembroRateioForm({ dados, quemPagaOpcoes, onChange, onCancelar, onSalvar, salvando, pendencias }) {
+  return (
+    <div className="card">
+      <div className="iptu-header">
+        <h4>Adicionar imóvel ao rateio {dados.rotulo}</h4>
+        <button type="button" className="link-btn" onClick={onCancelar}>
+          Cancelar
+        </button>
+      </div>
+      <label>
+        Código "I"
+        <input value={dados.codigo} onChange={(e) => onChange({ codigo: e.target.value })} placeholder="ex: 1601" />
+      </label>
+      <label>
+        Tributo
+        <select value={dados.tributo} onChange={(e) => onChange({ tributo: e.target.value })}>
+          <option value="IPTU">IPTU</option>
+          <option value="DATI">DATI</option>
+        </select>
+      </label>
+      <label>
+        Inscrição {dados.tributo}
+        <input value={dados.inscricao} onChange={(e) => onChange({ inscricao: e.target.value })} />
+      </label>
+      <label>
+        Proprietário
+        <input value={dados.proprietario} onChange={(e) => onChange({ proprietario: e.target.value })} />
+      </label>
+      <label>
+        Nome no carnê (se diferente do proprietário)
+        <input value={dados.nominalIptu} onChange={(e) => onChange({ nominalIptu: e.target.value })} />
+      </label>
+      <label>
+        Forma de pagamento
+        <select value={dados.formaPgto} onChange={(e) => onChange({ formaPgto: e.target.value })}>
+          <option value="Cota única">Cota única</option>
+          <option value="Parcelado">Parcelado</option>
+        </select>
+      </label>
+      {dados.formaPgto === 'Cota única' ? (
+        <label>
+          Valor (R$)
+          <input type="number" step="0.01" value={dados.cotaUnica} onChange={(e) => onChange({ cotaUnica: e.target.value })} />
+        </label>
+      ) : (
+        <>
+          <label>
+            Parcela (R$)
+            <input type="number" step="0.01" value={dados.parcela} onChange={(e) => onChange({ parcela: e.target.value })} />
+          </label>
+          <label>
+            Última parcela (R$, deixe em branco se igual)
+            <input
+              type="number"
+              step="0.01"
+              value={dados.ultimaParcela}
+              onChange={(e) => onChange({ ultimaParcela: e.target.value })}
+            />
+          </label>
+        </>
+      )}
+      <label>
+        Quem paga
+        <select value={dados.quemPaga} onChange={(e) => onChange({ quemPaga: e.target.value })}>
+          <option value="">—</option>
+          {quemPagaOpcoes.map((op) => (
+            <option key={op} value={op}>
+              {op}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        % de reajuste (provisão pro próximo exercício)
+        <input type="number" step="0.1" value={dados.reajustePct} onChange={(e) => onChange({ reajustePct: e.target.value })} />
+      </label>
+      {pendencias.length > 0 && <p className="meta">Falta: {pendencias.join(' · ')}</p>}
+      <div className="actions-row">
+        <button type="button" className="link-btn" onClick={onCancelar} disabled={salvando}>
+          Cancelar
+        </button>
+        <button type="button" disabled={pendencias.length > 0 || salvando} onClick={onSalvar}>
+          {salvando ? 'Salvando...' : 'Cadastrar e lançar'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Uma linha de imóvel dentro de um grupo de rateio - abrir (navegação
+// fluida sem sair do contexto do rateio), status de lançado por tributo com
+// atalho pra marcar, e remover (quando aplicável).
+function MembroRateioLinha({ m, atual, onAbrir, onMarcarLancado, onRemover, modoLeitura }) {
+  const temIptu = m.inscricaoIptu && m.inscricaoIptu !== 'Não tem';
+  const temDati = m.dati && m.dati !== 'Não tem';
+  const valor =
+    m.formaPgto === 'Cota única'
+      ? (Number(m.iptuCotaUnica) || 0) + (Number(m.datiCotaUnica) || 0)
+      : (Number(m.iptuTotalCalculado) || 0) + (Number(m.datiTotalCalculado) || 0);
+  return (
+    <li className="card">
+      <button type="button" className="choice-item" onClick={onAbrir}>
+        I {m.codigo || '(sem código)'} — {m.nominalIptu || m.proprietario} — {formatarMoeda(valor)}
+        {atual && ' (este)'}
+      </button>
+      {m.obs && <span className="meta"> {m.obs}</span>}
+      <div className="meta">
+        {temIptu && (
+          <>
+            IPTU: <strong>{m.iptuLancado === 'Feito' ? 'Feito' : 'Pendente'}</strong>
+            {!modoLeitura && m.iptuLancado !== 'Feito' && (
+              <>
+                {' '}
+                <button type="button" className="link-btn" onClick={() => onMarcarLancado('IPTU')}>
+                  marcar lançado
+                </button>
+              </>
+            )}
+          </>
+        )}
+        {temIptu && temDati && ' · '}
+        {temDati && (
+          <>
+            DATI: <strong>{m.datiLancado === 'Feito' ? 'Feito' : 'Pendente'}</strong>
+            {!modoLeitura && m.datiLancado !== 'Feito' && (
+              <>
+                {' '}
+                <button type="button" className="link-btn" onClick={() => onMarcarLancado('DATI')}>
+                  marcar lançado
+                </button>
+              </>
+            )}
+          </>
+        )}
+      </div>
+      {!modoLeitura && onRemover && (
+        <button type="button" className="link-btn" onClick={onRemover}>
+          remover deste rateio
+        </button>
+      )}
+    </li>
+  );
+}
+
+function membroRateioPendente(m) {
+  const temIptu = m.inscricaoIptu && m.inscricaoIptu !== 'Não tem';
+  const temDati = m.dati && m.dati !== 'Não tem';
+  return (temIptu && m.iptuLancado !== 'Feito') || (temDati && m.datiLancado !== 'Feito');
+}
+
 let proximaChaveDivisao = 1;
 function membroDivisaoVazio(dados) {
   return {
@@ -100,6 +254,13 @@ export default function Consulta() {
   const [membrosDivisao, setMembrosDivisao] = useState([]);
   const [carregandoDivisao, setCarregandoDivisao] = useState(false);
   const [salvandoDivisao, setSalvandoDivisao] = useState(false);
+
+  // Cadastro rápido de um novo membro dentro de um imóvel de rateio já
+  // existente (ex: unidade que acabou de ser cadastrada no sistema base) -
+  // cadastra e já lança na mesma ação, sem sair do contexto do rateio.
+  const [novoMembroRateio, setNovoMembroRateio] = useState(null);
+  const [salvandoNovoMembroRateio, setSalvandoNovoMembroRateio] = useState(false);
+  const [soPendentesRateio, setSoPendentesRateio] = useState(false);
 
   const location = useLocation();
 
@@ -208,12 +369,21 @@ export default function Consulta() {
   // app faz backup do arquivo automaticamente antes.
   async function excluirImovel() {
     if (!imovel) return;
+    const identificador = imovel.codigo || '(sem código)';
     if (
       !window.confirm(
-        `Excluir o imóvel I ${imovel.codigo || '(sem código)'} (${imovel.proprietario || 'sem proprietário'})? ` +
+        `Excluir o imóvel I ${identificador} (${imovel.proprietario || 'sem proprietário'})? ` +
           'Isso limpa todos os campos dessa linha na planilha. Um backup do arquivo é feito automaticamente antes.'
       )
     ) {
+      return;
+    }
+    const confirmacao = window.prompt(
+      `Pra confirmar de vez, digite o código "${identificador}" (sem o "I") aqui embaixo:`
+    );
+    if (confirmacao === null) return;
+    if (confirmacao.trim() !== String(identificador).trim()) {
+      window.alert('Código não confere. Exclusão cancelada.');
       return;
     }
     setError('');
@@ -466,6 +636,133 @@ export default function Consulta() {
     }
   }
 
+  function novoMembroRateioVazio(rotulo) {
+    return {
+      rotulo,
+      codigo: '',
+      tributo: 'IPTU',
+      inscricao: '',
+      proprietario: '',
+      nominalIptu: '',
+      formaPgto: 'Parcelado',
+      cotaUnica: '',
+      parcela: '',
+      ultimaParcela: '',
+      quemPaga: '',
+      reajustePct: '',
+    };
+  }
+
+  function abrirNovoMembroRateio(rotulo) {
+    setError('');
+    setNovoMembroRateio(novoMembroRateioVazio(rotulo));
+  }
+
+  function fecharNovoMembroRateio() {
+    setNovoMembroRateio(null);
+  }
+
+  function atualizarNovoMembroRateio(campos) {
+    setNovoMembroRateio((prev) => (prev ? { ...prev, ...campos } : prev));
+  }
+
+  function pendenciasNovoMembroRateio() {
+    if (!novoMembroRateio) return [];
+    const pendencias = [];
+    if (!novoMembroRateio.codigo.trim()) pendencias.push('código "I"');
+    if (!novoMembroRateio.inscricao.trim()) pendencias.push(`inscrição ${novoMembroRateio.tributo}`);
+    if (novoMembroRateio.formaPgto === 'Cota única') {
+      if (novoMembroRateio.cotaUnica === '' || isNaN(Number(novoMembroRateio.cotaUnica))) {
+        pendencias.push('valor da cota única');
+      }
+    } else if (novoMembroRateio.parcela === '' || isNaN(Number(novoMembroRateio.parcela))) {
+      pendencias.push('valor da parcela');
+    }
+    return pendencias;
+  }
+
+  // Re-busca o grupo de rateio pelo rótulo (sem re-executar a busca inteira)
+  // pra atualizar a tela depois de cadastrar/marcar lançado um membro, quando
+  // não há um "I" aberto (busca direta pelo número do rateio).
+  async function recarregarRateio(rotulo) {
+    try {
+      const { data } = await api.get(`/rateios/${encodeURIComponent(rotulo)}`);
+      setGrupoRateio(data);
+      setInscricaoRateio((prev) => (prev ? data.porInscricao.find((g) => g.inscricao === prev.inscricao) || null : prev));
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    }
+  }
+
+  async function salvarNovoMembroRateio() {
+    if (!novoMembroRateio) return;
+    setError('');
+    setSalvandoNovoMembroRateio(true);
+    try {
+      const form = new FormData();
+      form.append('rotulo', novoMembroRateio.rotulo);
+      form.append('tributo', novoMembroRateio.tributo);
+      const item = {
+        codigo: novoMembroRateio.codigo.trim(),
+        formaPgto: novoMembroRateio.formaPgto,
+        proprietario: novoMembroRateio.proprietario || undefined,
+        nominalIptu: novoMembroRateio.nominalIptu || undefined,
+        quemPaga: novoMembroRateio.quemPaga || undefined,
+      };
+      if (novoMembroRateio.tributo === 'IPTU') item.inscricaoIptu = novoMembroRateio.inscricao || undefined;
+      else item.dati = novoMembroRateio.inscricao || undefined;
+      if (novoMembroRateio.reajustePct !== '') item.reajustePct = novoMembroRateio.reajustePct;
+      if (novoMembroRateio.formaPgto === 'Cota única') {
+        item.cotaUnica = novoMembroRateio.cotaUnica;
+      } else {
+        item.parcela = novoMembroRateio.parcela;
+        if (novoMembroRateio.ultimaParcela !== '') item.ultimaParcela = novoMembroRateio.ultimaParcela;
+      }
+      form.append('itens', JSON.stringify([item]));
+
+      const { data } = await api.post('/lancamentos/rateio', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const falha = data.resultados.find((r) => r.status === 'erro');
+      if (falha) {
+        setError(`Não deu pra cadastrar: ${falha.mensagem}`);
+        return;
+      }
+      const rotulo = novoMembroRateio.rotulo;
+      fecharNovoMembroRateio();
+      if (imovel) {
+        await abrirImovel(imovel.codigo, imovel.inscricaoIptu || imovel.dati);
+      } else {
+        await recarregarRateio(rotulo);
+      }
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setSalvandoNovoMembroRateio(false);
+    }
+  }
+
+  // Marca lançado um membro do rateio (não necessariamente o "I" aberto na
+  // tela) - reaproveita a mesma rota de marcarLancado, só que endereçando
+  // pelo código/inscrição do membro clicado.
+  async function marcarLancadoMembro(codigoMembro, inscricaoMembro, tributo) {
+    setError('');
+    try {
+      await api.patch(`/imoveis/${encodeURIComponent(codigoNaUrl(codigoMembro))}/lancado`, {
+        tributo,
+        status: 'Feito',
+        inscricao: inscricaoMembro,
+      });
+      if (imovel) {
+        await abrirImovel(imovel.codigo, imovel.inscricaoIptu || imovel.dati);
+      } else if (grupoRateio) {
+        await recarregarRateio(grupoRateio.rotuloContabil);
+      }
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    }
+  }
+
   return (
     <div className="page">
       <h2>Consultar imóvel</h2>
@@ -711,18 +1008,52 @@ export default function Consulta() {
                   Dividir/editar valores desta inscrição
                 </button>
               )}
-              <ul className="resumo-list">
-                {inscricaoRateio.imoveis.map((m, i) => (
-                  <li key={`${m.codigo}-${i}`}>
-                    <button
-                      className="choice-item"
-                      onClick={() => abrirImovel(m.codigo, m.inscricaoIptu || m.dati)}
-                    >
-                      I {m.codigo} — {m.nominalIptu || m.proprietario}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              {novoMembroRateio ? (
+                <NovoMembroRateioForm
+                  dados={novoMembroRateio}
+                  quemPagaOpcoes={config?.listas?.quemPagaOpcoes || []}
+                  onChange={atualizarNovoMembroRateio}
+                  onCancelar={fecharNovoMembroRateio}
+                  onSalvar={salvarNovoMembroRateio}
+                  salvando={salvandoNovoMembroRateio}
+                  pendencias={pendenciasNovoMembroRateio()}
+                />
+              ) : (
+                <>
+                  <div className="actions-row">
+                    {!modoLeitura && (
+                      <button
+                        type="button"
+                        className="link-btn"
+                        onClick={() => abrirNovoMembroRateio(grupoRateio.rotuloContabil)}
+                      >
+                        + Adicionar imóvel a este rateio
+                      </button>
+                    )}
+                    <label className="meta">
+                      <input
+                        type="checkbox"
+                        checked={soPendentesRateio}
+                        onChange={(e) => setSoPendentesRateio(e.target.checked)}
+                      />{' '}
+                      mostrar só pendentes
+                    </label>
+                  </div>
+                  <ul className="resumo-list">
+                    {inscricaoRateio.imoveis
+                      .filter((m) => !soPendentesRateio || membroRateioPendente(m))
+                      .map((m, i) => (
+                        <MembroRateioLinha
+                          key={`${m.codigo}-${i}`}
+                          m={m}
+                          onAbrir={() => abrirImovel(m.codigo, m.inscricaoIptu || m.dati)}
+                          onMarcarLancado={(tributo) => marcarLancadoMembro(m.codigo, m.inscricaoIptu || m.dati, tributo)}
+                          modoLeitura={modoLeitura}
+                        />
+                      ))}
+                  </ul>
+                </>
+              )}
             </>
           )}
         </div>
@@ -876,31 +1207,58 @@ export default function Consulta() {
                   <li>DATI parcelado (total): <strong>{formatarMoeda(imovel.grupoRateio.totais.datiParcelado)}</strong></li>
                 )}
               </ul>
-              <p className="meta">Linhas do grupo (valor de cada unidade):</p>
-              <ul className="resumo-list">
-                {imovel.grupoRateio.imoveis.map((m, i) => (
-                  <li key={`${m.codigo}-${m.inscricaoIptu || m.dati || i}`}>
-                    I {m.codigo} — {m.nominalIptu || m.proprietario}
-                    {': '}
-                    {m.formaPgto === 'Cota única'
-                      ? formatarMoeda((Number(m.iptuCotaUnica) || 0) + (Number(m.datiCotaUnica) || 0))
-                      : formatarMoeda((Number(m.iptuTotalCalculado) || 0) + (Number(m.datiTotalCalculado) || 0))}
-                    {m.codigo === imovel.codigo && m.inscricaoIptu === imovel.inscricaoIptu && ' (este)'}
+              {novoMembroRateio ? (
+                <NovoMembroRateioForm
+                  dados={novoMembroRateio}
+                  quemPagaOpcoes={config?.listas?.quemPagaOpcoes || []}
+                  onChange={atualizarNovoMembroRateio}
+                  onCancelar={fecharNovoMembroRateio}
+                  onSalvar={salvarNovoMembroRateio}
+                  salvando={salvandoNovoMembroRateio}
+                  pendencias={pendenciasNovoMembroRateio()}
+                />
+              ) : (
+                <>
+                  <div className="actions-row">
                     {!modoLeitura && (
-                      <>
-                        {' — '}
-                        <button
-                          type="button"
-                          className="link-btn"
-                          onClick={() => removerDoRateio(m.codigo, m.inscricaoIptu || m.dati)}
-                        >
-                          remover deste rateio
-                        </button>
-                      </>
+                      <button
+                        type="button"
+                        className="link-btn"
+                        onClick={() => abrirNovoMembroRateio(imovel.grupoRateio.rotuloContabil)}
+                      >
+                        + Adicionar imóvel a este rateio
+                      </button>
                     )}
-                  </li>
-                ))}
-              </ul>
+                    <label className="meta">
+                      <input
+                        type="checkbox"
+                        checked={soPendentesRateio}
+                        onChange={(e) => setSoPendentesRateio(e.target.checked)}
+                      />{' '}
+                      mostrar só pendentes
+                    </label>
+                  </div>
+                  <p className="meta">Linhas do grupo:</p>
+                  <ul className="resumo-list">
+                    {imovel.grupoRateio.imoveis
+                      .filter((m) => !soPendentesRateio || membroRateioPendente(m))
+                      .map((m, i) => {
+                        const atual = m.codigo === imovel.codigo && m.inscricaoIptu === imovel.inscricaoIptu;
+                        return (
+                          <MembroRateioLinha
+                            key={`${m.codigo}-${m.inscricaoIptu || m.dati || i}`}
+                            m={m}
+                            atual={atual}
+                            onAbrir={() => abrirImovel(m.codigo, m.inscricaoIptu || m.dati)}
+                            onMarcarLancado={(tributo) => marcarLancadoMembro(m.codigo, m.inscricaoIptu || m.dati, tributo)}
+                            onRemover={atual ? undefined : () => removerDoRateio(m.codigo, m.inscricaoIptu || m.dati)}
+                            modoLeitura={modoLeitura}
+                          />
+                        );
+                      })}
+                  </ul>
+                </>
+              )}
               <p className="meta">
                 Pra ajustar a divisão sem re-enviar o PDF, use "Dividir rateio desta inscrição" no topo da tela. Pra
                 trocar o carnê, use "Lançar" de novo informando o número {imovel.grupoRateio.rotuloContabil} como

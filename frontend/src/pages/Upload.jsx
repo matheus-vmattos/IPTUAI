@@ -60,6 +60,21 @@ function membroVazio(dadosIniciais) {
   };
 }
 
+// Usada quando o cadastro é manual (sem PDF) - mesma forma da extração
+// automática, só que tudo vazio, pra reaproveitar o mesmo assistente sem
+// mudar nenhuma lógica dele (os campos já ficam em branco/editáveis quando
+// a extração não acha nada).
+function extracaoVazia() {
+  return {
+    parceladas: [],
+    cotaUnica: [],
+    resumoParcelas: { parcela: null, ultimaParcela: null },
+    inscricaoDetectada: null,
+    imoveisPorInscricao: [],
+    codigoSugerido: null,
+  };
+}
+
 function valorTotalDoItem(item, nParcelas) {
   if (item.formaPgto === 'Cota única') {
     return item.cotaUnica === '' ? null : Number(item.cotaUnica);
@@ -163,6 +178,19 @@ export default function Upload() {
     await abrirItem(novaFila, 0);
   }
 
+  // Cadastro sem carnê - pro imóvel que acabou de chegar na imobiliária (sem
+  // guia ainda) ou quando um PDF simplesmente não abre (escaneado,
+  // corrompido). Reaproveita o mesmo assistente do zero, com campos em
+  // branco pra preencher na mão em vez de vir de uma extração.
+  async function cadastrarSemCarne() {
+    const novaFila = [{ arquivo: null, extracao: extracaoVazia(), erro: null }];
+    setFila(novaFila);
+    setIndice(0);
+    setResultados([]);
+    setTerminado(false);
+    await abrirItem(novaFila, 0);
+  }
+
   async function abrirItem(novaFila, idx) {
     if (idx >= novaFila.length) {
       setTerminado(true);
@@ -175,7 +203,7 @@ export default function Upload() {
       // Sem extração usável - segue pro proximo automaticamente, registrando o erro.
       setResultados((prev) => [
         ...prev,
-        { arquivo: entrada.arquivo.name, status: 'erro', mensagem: entrada.erro },
+        { arquivo: entrada.arquivo?.name || '(cadastro manual)', status: 'erro', mensagem: entrada.erro },
       ]);
       await abrirItem(novaFila, idx + 1);
       return;
@@ -420,7 +448,7 @@ export default function Upload() {
     try {
       const form = new FormData();
       const arquivo = fila[indice].arquivo;
-      form.append('arquivo', arquivo, arquivo.name);
+      if (arquivo) form.append('arquivo', arquivo, arquivo.name);
       form.append('rotulo', item.rateioRotulo.trim());
       form.append('tributo', item.tributo);
 
@@ -457,7 +485,7 @@ export default function Upload() {
       setResultados((prev) => [
         ...prev,
         {
-          arquivo: arquivo.name,
+          arquivo: arquivo?.name || '(cadastro manual)',
           status: falha.length === 0 ? 'sucesso' : 'erro',
           codigo: `rateio ${data.rotulo}`,
           mensagem:
@@ -482,7 +510,7 @@ export default function Upload() {
     try {
       const form = new FormData();
       const arquivo = fila[indice].arquivo;
-      form.append('arquivo', arquivo, arquivo.name);
+      if (arquivo) form.append('arquivo', arquivo, arquivo.name);
       form.append('codigo', item.codigo.trim());
       form.append('tributo', item.tributo);
       form.append('formaPgto', item.formaPgto);
@@ -507,7 +535,7 @@ export default function Upload() {
       setResultados((prev) => [
         ...prev,
         {
-          arquivo: arquivo.name,
+          arquivo: arquivo?.name || '(cadastro manual)',
           codigo: data.codigo,
           status: 'sucesso',
           criado: data.created,
@@ -559,6 +587,12 @@ export default function Upload() {
           />
           {loading && <p>Lendo arquivo(s)...</p>}
           {error && <div className="error">{error}</div>}
+          <p className="meta">
+            Imóvel novo, sem carnê ainda (ou um PDF que não abre)?{' '}
+            <button type="button" className="link-btn" onClick={cadastrarSemCarne}>
+              Cadastrar sem carnê
+            </button>
+          </p>
         </div>
       </div>
     );
@@ -603,7 +637,7 @@ export default function Upload() {
     <div className="page">
       <h2>Lançar IPTU / DATI</h2>
       <p className="meta">
-        Carnê {indice + 1} de {fila.length} — {fila[indice].arquivo.name}
+        Carnê {indice + 1} de {fila.length} — {fila[indice].arquivo?.name || 'Cadastro manual (sem carnê)'}
       </p>
       <div className="steps-indicator">
         {STEPS.map((s, i) => (
@@ -782,11 +816,13 @@ export default function Upload() {
                         </>
                       )}
                     </>
-                  ) : (
+                  ) : fila[indice].arquivo ? (
                     'Não consegui identificar a inscrição dentro do PDF.'
+                  ) : (
+                    'Cadastro manual — sem inscrição pra identificar automaticamente.'
                   )}
                 </p>
-                <p className="meta">Este carnê é de um imóvel de rateio (o valor se divide entre várias linhas "I")?</p>
+                <p className="meta">Este é um imóvel de rateio (o valor se divide entre várias linhas "I")?</p>
                 <div className="choice-row">
                   <button onClick={() => iniciarRateioPorInscricao(imoveisPorInscricao)}>Sim, é rateio</button>
                   <button

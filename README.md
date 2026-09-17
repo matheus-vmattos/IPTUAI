@@ -71,6 +71,11 @@ instalar assim que a atualização estiver pronta.
      (provisão pro próximo exercício) são independentes, já que a divisão
      real varia de carnê pra carnê. O PDF é salvo uma vez só e fica
      acessível a partir de qualquer linha do grupo.
+   - Imóvel novo que ainda não tem carnê em mãos (ou um PDF que não abre)?
+     O link **"Cadastrar sem carnê"** pula direto pro mesmo assistente sem
+     exigir arquivo — os campos ficam em branco pra preencher na mão, e o
+     lançamento é salvo do mesmo jeito (sem link de carnê, já que não tem
+     PDF nenhum envolvido).
 2. Diga se o carnê é de **IPTU ou DATI**, se é **cota única ou
    parcelado**, e o **código de identificação do imóvel** (coluna `I` da
    planilha, ex: `213`). Se o código já existir, os dados são gravados na
@@ -101,9 +106,17 @@ instalar assim que a atualização estiver pronta.
    inscrição). Se o imóvel fizer parte de
    um **imóvel de rateio** (campo "Imóvel de rateio" preenchido — o número
    usado no sistema contábil pra cobrar o proprietário, não um código
-   "I"), mostra um card com o valor de cada linha do grupo e o total
-   consolidado a lançar, com um botão pra **remover uma linha do grupo**
-   (não mexe nos valores já lançados, só tira o rótulo). O botão
+   "I"), mostra um card com o valor de cada linha do grupo, se cada uma já
+   foi **lançada no sistema contábil** (com atalho pra marcar sem sair da
+   tela) e o total consolidado a lançar. Clicar em qualquer linha **abre
+   ela direto**, sem precisar voltar pra busca — navegação fluida entre
+   todos os "I" do mesmo rateio. O checkbox **"mostrar só pendentes"**
+   filtra pra quem ainda falta lançar, e o link **"+ Adicionar imóvel a
+   este rateio"** cadastra e já lança uma linha nova no grupo numa ação só
+   (útil quando uma unidade nova é cadastrada no sistema base depois do
+   carnê original — ex: um prédio de rateio que ainda não tinha todas as
+   unidades registradas). Tem também um botão pra **remover uma linha do
+   grupo** (não mexe nos valores já lançados, só tira o rótulo). O botão
    **"Dividir/editar valores desta inscrição"** junta todas as linhas "I"
    que compartilham a mesma inscrição num rateio e grava o valor de cada
    uma de uma vez — sem precisar re-enviar o PDF pelo assistente de
@@ -123,7 +136,9 @@ instalar assim que a atualização estiver pronta.
    mas o valor tem que ser dividido por 16). O botão **"Excluir imóvel"** limpa todos os
    campos daquela linha (útil pra linha duplicada/errada, ex: uma linha
    órfã de antes do app existir, sem código "I", duplicando uma inscrição
-   de outra linha) — não remove a linha fisicamente da tabela (evita ter
+   de outra linha) — pede **confirmação em dois passos** (aceitar o aviso
+   e depois digitar o código "I" da linha) pra evitar exclusão por
+   acidente — não remove a linha fisicamente da tabela (evita ter
    que renumerar linha por linha as fórmulas da planilha), só apaga o
    conteúdo, e faz backup automático do arquivo antes. Uma linha sem
    código aparece na busca como "(sem código)" e ainda pode ser aberta e
