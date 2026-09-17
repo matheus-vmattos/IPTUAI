@@ -1,74 +1,95 @@
 const express = require('express');
-const db = require('../db');
-const { requireAuth } = require('../auth');
+const excelStore = require('../excelStore');
 const asyncHandler = require('../asyncHandler');
 
 const router = express.Router();
-router.use(requireAuth);
 
-function normalizaCodigo(codigo) {
-  return codigo.trim().toUpperCase().replace(/\s+/g, ' ');
+// Express nao aceita um segmento de path vazio em "/:codigo" - linhas orfas
+// (sem "I", coluna A vazia - normalmente erro de digitacao manual de antes
+// do app existir) usam esse valor fixo no lugar do codigo; o backend
+// converte de volta pra "" antes de chamar excelStore, que ja sabe achar
+// essas linhas pela inscricao exata (ver excelStore.localizarLinha).
+const SEM_CODIGO = '_sem_codigo_';
+function codigoDoParam(raw) {
+  return raw === SEM_CODIGO ? '' : raw;
 }
 
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const busca = (req.query.q || '').trim();
-    const imoveis = busca
-      ? await db.all('SELECT * FROM imoveis WHERE codigo LIKE ? ORDER BY codigo', [
-          `%${normalizaCodigo(busca)}%`,
-        ])
-      : await db.all('SELECT * FROM imoveis ORDER BY codigo');
+    const imoveis = await excelStore.listImoveis(req.query.q || '');
     res.json(imoveis);
   })
 );
 
+// Todas as linhas com essa inscricao exata (IPTU ou DATI) - usado pra
+// montar/editar um rateio direto em Consultar sem precisar re-lancar o
+// carne pelo assistente de Lancar. Precisa vir antes de "/:codigo" (senao
+// "por-inscricao" seria interpretado como um codigo).
 router.get(
-  '/:codigo',
+  '/por-inscricao/:inscricao',
   asyncHandler(async (req, res) => {
-    const codigo = normalizaCodigo(req.params.codigo);
-    const imovel = await db.get('SELECT * FROM imoveis WHERE codigo = ?', [codigo]);
-    if (!imovel) return res.status(404).json({ error: 'Imovel nao encontrado' });
-
-    // arquivo_blob fica de fora aqui de proposito - so e buscado sob demanda
-    // na rota de download/impressao, para nao inflar essa resposta.
-    const iptus = await db.all(
-      `SELECT id, imovel_id, exercicio, tipo_pagamento, forma_pagamento, arquivo_nome, created_by, created_at
-       FROM iptus WHERE imovel_id = ? ORDER BY exercicio DESC, id DESC`,
-      [imovel.id]
-    );
-
-    const iptusComParcelas = [];
-    for (const iptu of iptus) {
-      const parcelas = await db.all('SELECT * FROM parcelas WHERE iptu_id = ? ORDER BY numero', [
-        iptu.id,
-      ]);
-      iptusComParcelas.push({ ...iptu, parcelas });
-    }
-
-    res.json({ ...imovel, iptus: iptusComParcelas });
+    const imoveis = await excelStore.buscarPorInscricao(req.params.inscricao);
+    res.json(imoveis);
   })
 );
 
-router.post(
-  '/',
+// Codigo "I" normalmente e unico, mas a planilha real tem casos de um
+// mesmo codigo em varias linhas (ex: um "I" com mais de uma
+// inscricao/guia de IPTU) - nesse caso o backend devolve 409 com a lista
+// de candidatos, e o parametro ?inscricao= desambigua qual linha usar.
+router.get(
+  '/:codigo',
   asyncHandler(async (req, res) => {
-    const { codigo, endereco } = req.body;
-    if (!codigo || !codigo.trim()) {
-      return res.status(400).json({ error: 'Informe o codigo de identificacao (ex: I 213)' });
+    const imovel = await excelStore.getImovel(codigoDoParam(req.params.codigo), req.query.inscricao);
+    if (!imovel) return res.status(404).json({ error: 'Imóvel não encontrado na planilha' });
+    res.json(imovel);
+  })
+);
+
+// Edicao livre: aceita qualquer subconjunto dos campos da linha (mesmos
+// nomes usados no resto da API: proprietario, nominalIptu, inscricaoIptu,
+// dati, quemPagaIptu, quemPagaDati, formaPgto, iptuCotaUnica, iptuParcela,
+// iptuUltimaParcela, datiCotaUnica, datiParcela, datiUltimaParcela,
+// linkCarne, iptuSalvo, iptuLancado, datiSalvo, datiLancado,
+// imovelDeRateio, obs). So funciona pra imovel ja existente. ?inscricao=
+// desambigua qual linha, se o codigo bater em mais de uma - usa a
+// inscricao ORIGINAL da linha (antes da edicao), nunca o valor novo que
+// porventura esteja sendo editado no mesmo corpo da requisicao.
+router.patch(
+  '/:codigo',
+  asyncHandler(async (req, res) => {
+    const resultado = await excelStore.atualizarImovel(codigoDoParam(req.params.codigo), req.body || {}, req.query.inscricao);
+    res.json(resultado);
+  })
+);
+
+router.patch(
+  '/:codigo/lancado',
+  asyncHandler(async (req, res) => {
+    const { tributo, status, inscricao } = req.body;
+    if (!['IPTU', 'DATI'].includes(tributo)) {
+      return res.status(400).json({ error: 'tributo deve ser "IPTU" ou "DATI"' });
     }
+    const resultado = await excelStore.marcarLancado({
+      codigo: codigoDoParam(req.params.codigo),
+      tributo,
+      status: status || 'Feito',
+      inscricao,
+    });
+    res.json(resultado);
+  })
+);
 
-    const codigoNorm = normalizaCodigo(codigo);
-    const existente = await db.get('SELECT * FROM imoveis WHERE codigo = ?', [codigoNorm]);
-    if (existente) return res.json(existente);
-
-    const info = await db.run(
-      'INSERT INTO imoveis (codigo, endereco, created_by) VALUES (?, ?, ?)',
-      [codigoNorm, endereco || null, req.user.sub]
-    );
-
-    const imovel = await db.get('SELECT * FROM imoveis WHERE id = ?', [info.lastInsertRowid]);
-    res.status(201).json(imovel);
+// Exclui o imovel (limpa todos os campos da linha - ver excelStore.excluirImovel
+// pra detalhes de por que nao remove a linha fisicamente). ?inscricao=
+// desambigua qual linha, se o codigo bater em mais de uma. Faz backup do
+// arquivo automaticamente antes de mexer.
+router.delete(
+  '/:codigo',
+  asyncHandler(async (req, res) => {
+    const resultado = await excelStore.excluirImovel(codigoDoParam(req.params.codigo), req.query.inscricao);
+    res.json(resultado);
   })
 );
 

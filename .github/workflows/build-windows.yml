@@ -25,7 +25,11 @@ jobs:
         with:
           node-version: 20
 
-      - name: Instalar dependencias
+      - name: Instalar dependencias do backend (empacotado dentro do app)
+        working-directory: backend
+        run: npm ci --omit=dev
+
+      - name: Instalar dependencias do frontend
         run: npm ci
 
       - name: Build do renderer
