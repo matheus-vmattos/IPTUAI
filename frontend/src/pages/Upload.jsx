@@ -13,6 +13,14 @@ function formatarData(iso) {
   return `${dia}/${mes}/${ano}`;
 }
 
+// A tela mostra o código sempre como "I 899", então é natural digitar
+// assim de volta num campo que pede só o código - tira o "I" (e traço ou
+// espaço depois dele) antes de usar de verdade, senão a linha nova fica
+// com um código tipo "I 899" em vez de "899".
+function normalizarCodigo(str) {
+  return String(str ?? '').trim().replace(/^i[\s.\-_]*/i, '');
+}
+
 function itemVazio() {
   return {
     tributo: '',
@@ -261,10 +269,11 @@ export default function Upload() {
   }
 
   async function buscarImovelManual(codigo) {
-    atualizarItem({ codigo });
-    if (!codigo.trim()) return;
+    const normalizado = normalizarCodigo(codigo);
+    atualizarItem({ codigo: normalizado });
+    if (!normalizado) return;
     setBuscandoImovel(true);
-    const atualizado = await prefillPorCodigo(codigo.trim(), item);
+    const atualizado = await prefillPorCodigo(normalizado, item);
     setItem(atualizado);
     setBuscandoImovel(false);
   }
@@ -360,7 +369,7 @@ export default function Upload() {
   // Adiciona uma linha "I" ao grupo (existente na planilha ou nova) - busca
   // os dados pra prefilar proprietário/inscrição quando já existir.
   async function adicionarMembroRateio(codigoStr) {
-    const codigo = codigoStr.trim();
+    const codigo = normalizarCodigo(codigoStr);
     if (!codigo) return;
     if (item.rateioMembros.some((m) => m.codigo === codigo)) return;
 

@@ -8,6 +8,14 @@ function formatarMoeda(valor) {
   return Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+// A tela mostra o código sempre como "I 899", então é natural digitar
+// assim de volta num campo que pede só o código - tira o "I" (e traço ou
+// espaço depois dele) antes de usar de verdade, senão a linha nova fica
+// com um código tipo "I 899" em vez de "899".
+function normalizarCodigo(str) {
+  return String(str ?? '').trim().replace(/^i[\s.\-_]*/i, '');
+}
+
 // Label curto de valor pra distinguir, numa lista, guias diferentes do
 // mesmo código "I" (ex: 2 inscrições de IPTU na mesma linha do imóvel).
 function valorLabelResultado(r) {
@@ -172,7 +180,12 @@ function NovoMembroRateioForm({ dados, quemPagaOpcoes, onChange, onCancelar, onS
       </div>
       <label>
         Código "I"
-        <input value={dados.codigo} onChange={(e) => onChange({ codigo: e.target.value })} placeholder="ex: 1601" />
+        <input
+          value={dados.codigo}
+          onChange={(e) => onChange({ codigo: e.target.value })}
+          onBlur={(e) => onChange({ codigo: normalizarCodigo(e.target.value) })}
+          placeholder="ex: 1601"
+        />
       </label>
       <label>
         Tributo
@@ -883,7 +896,7 @@ export default function Consulta() {
   // Adiciona uma linha "I" à divisão - busca os dados pra prefilar se já
   // existir na planilha (mesmo que não compartilhe essa inscrição hoje).
   async function adicionarMembroDivisao(codigoStr) {
-    const codigo = codigoStr.trim();
+    const codigo = normalizarCodigo(codigoStr);
     if (!codigo) return;
     if (membrosDivisao.some((m) => m.codigo === codigo)) return;
     try {
@@ -1068,7 +1081,7 @@ export default function Consulta() {
       form.append('rotulo', novoMembroRateio.rotulo);
       form.append('tributo', novoMembroRateio.tributo);
       const item = {
-        codigo: novoMembroRateio.codigo.trim(),
+        codigo: normalizarCodigo(novoMembroRateio.codigo),
         formaPgto: novoMembroRateio.formaPgto,
         proprietario: novoMembroRateio.proprietario || undefined,
         nominalIptu: novoMembroRateio.nominalIptu || undefined,
