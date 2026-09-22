@@ -362,11 +362,17 @@ function montarGrupoRateio(rotulo, membrosFields, nParcelas) {
     iptuUltimaParcela: f.iptuUltimaParcela,
     iptuTotalCalculado: calcTotal(f.iptuParcela, f.iptuUltimaParcela, nParcelas),
     iptuLancado: f.iptuLancado,
+    iptuProvisaoProximoAno: f.iptuProvisaoProximoAno,
+    iptuProvisaoParcela: f.iptuProvisaoParcela,
+    iptuProvisaoUltimaParcela: f.iptuProvisaoUltimaParcela,
     datiCotaUnica: f.datiCotaUnica,
     datiParcela: f.datiParcela,
     datiUltimaParcela: f.datiUltimaParcela,
     datiTotalCalculado: calcTotal(f.datiParcela, f.datiUltimaParcela, nParcelas),
     datiLancado: f.datiLancado,
+    datiProvisaoProximoAno: f.datiProvisaoProximoAno,
+    datiProvisaoParcela: f.datiProvisaoParcela,
+    datiProvisaoUltimaParcela: f.datiProvisaoUltimaParcela,
     linkCarne: f.linkCarne,
   }));
   membros.sort((a, b) => Number(a.codigo) - Number(b.codigo));

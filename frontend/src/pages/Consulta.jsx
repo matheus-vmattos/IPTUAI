@@ -17,6 +17,105 @@ function valorLabelResultado(r) {
   return cotaUnica ? `${formatarMoeda(valor)} (cota única)` : `${formatarMoeda(valor)}/parcela`;
 }
 
+function escaparHtml(texto) {
+  return String(texto ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[c]);
+}
+
+function valorAtualMembroRateio(m, tributo) {
+  const cotaUnica = tributo === 'IPTU' ? m.iptuCotaUnica : m.datiCotaUnica;
+  const parcela = tributo === 'IPTU' ? m.iptuParcela : m.datiParcela;
+  if (m.formaPgto === 'Cota única') {
+    return cotaUnica !== null && cotaUnica !== undefined ? `${formatarMoeda(cotaUnica)} (cota única)` : '—';
+  }
+  return parcela !== null && parcela !== undefined ? `${formatarMoeda(parcela)}/mês` : '—';
+}
+
+function valorProximoMembroRateio(m, tributo) {
+  const provProximoAno = tributo === 'IPTU' ? m.iptuProvisaoProximoAno : m.datiProvisaoProximoAno;
+  const provParcela = tributo === 'IPTU' ? m.iptuProvisaoParcela : m.datiProvisaoParcela;
+  if (m.formaPgto === 'Cota única') {
+    return provProximoAno !== null && provProximoAno !== undefined
+      ? `${formatarMoeda(provProximoAno)} (cota única)`
+      : '—';
+  }
+  return provParcela !== null && provParcela !== undefined ? `${formatarMoeda(provParcela)}/mês` : '—';
+}
+
+// Relatório curto pra compartilhar com quem vai ajudar a lançar os carnês
+// desse rateio - número do rateio, cada "I" que o compõe, o valor que já
+// tá lançado neste exercício e uma aproximação do próximo (provisão com
+// reajuste), pra servir de referência enquanto os carnês reais não chegam.
+function montarHtmlRelatorioRateio(grupo, exercicio) {
+  const proximoExercicio = exercicio ? exercicio + 1 : null;
+  const temDati = grupo.imoveis.some(
+    (m) => m.dati && m.dati !== 'Não tem' && (m.datiCotaUnica != null || m.datiParcela != null)
+  );
+
+  const linhaTabela = (m, tributo) => `
+    <tr>
+      <td>I ${escaparHtml(m.codigo || '(sem código)')}</td>
+      <td>${escaparHtml(m.nominalIptu || m.proprietario || '—')}</td>
+      <td>${escaparHtml(tributo === 'IPTU' ? m.inscricaoIptu : m.dati) || '—'}</td>
+      <td>${valorAtualMembroRateio(m, tributo)}</td>
+      <td>${valorProximoMembroRateio(m, tributo)}</td>
+    </tr>`;
+
+  const linhasIptu = grupo.imoveis
+    .filter((m) => m.inscricaoIptu && m.inscricaoIptu !== 'Não tem')
+    .map((m) => linhaTabela(m, 'IPTU'))
+    .join('');
+  const linhasDati = grupo.imoveis
+    .filter((m) => m.dati && m.dati !== 'Não tem')
+    .map((m) => linhaTabela(m, 'DATI'))
+    .join('');
+
+  const cabecalhoTabela = (ref, refProximo) =>
+    `<thead><tr><th>Imóvel</th><th>Proprietário / nome no carnê</th><th>Inscrição</th><th>Valor atual (ref. ${ref})</th><th>Aproximado próximo (ref. ${refProximo})</th></tr></thead>`;
+
+  return `<!doctype html>
+<html><head><meta charset="utf-8"><title>Lançamento — Imóvel de rateio ${escaparHtml(grupo.rotuloContabil)}</title>
+<style>
+  body { font-family: -apple-system, Arial, sans-serif; color: #1c1e21; padding: 32px; }
+  h1 { font-size: 20px; margin-bottom: 2px; }
+  .subtitulo { color: #666; font-size: 12px; margin-top: 0; margin-bottom: 24px; }
+  h2 { font-size: 14px; margin: 20px 0 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 16px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
+  th { background: #f5f6f8; }
+  .rodape { color: #888; font-size: 11px; margin-top: 24px; }
+</style>
+</head><body>
+  <h1>Lançamento — Imóvel de rateio ${escaparHtml(grupo.rotuloContabil)}</h1>
+  <p class="subtitulo">Gerado em ${new Date().toLocaleDateString('pt-BR')} — ${grupo.totalImoveis} imóve${
+    grupo.totalImoveis === 1 ? 'l' : 'is'
+  } nesse rateio</p>
+
+  <h2>IPTU</h2>
+  <table>
+    ${cabecalhoTabela(exercicio ?? '—', proximoExercicio ?? '—')}
+    <tbody>${linhasIptu || '<tr><td colspan="5">Nenhum imóvel com IPTU nesse rateio.</td></tr>'}</tbody>
+  </table>
+
+  ${
+    temDati
+      ? `<h2>DATI</h2>
+  <table>
+    ${cabecalhoTabela(exercicio ?? '—', proximoExercicio ?? '—')}
+    <tbody>${linhasDati}</tbody>
+  </table>`
+      : ''
+  }
+
+  <p class="rodape">"Aproximado próximo" é a provisão calculada com o % de reajuste do lançamento atual — o valor real do próximo carnê pode variar.</p>
+</body></html>`;
+}
+
 const CAMPOS_EDITAVEIS = [
   'proprietario',
   'nominalIptu',
@@ -268,10 +367,11 @@ function MembroRateioLinha({
 }) {
   const temIptu = m.inscricaoIptu && m.inscricaoIptu !== 'Não tem';
   const temDati = m.dati && m.dati !== 'Não tem';
-  const valor =
-    m.formaPgto === 'Cota única'
-      ? (Number(m.iptuCotaUnica) || 0) + (Number(m.datiCotaUnica) || 0)
-      : (Number(m.iptuTotalCalculado) || 0) + (Number(m.datiTotalCalculado) || 0);
+  const ehCotaUnica = m.formaPgto === 'Cota única';
+  const parcelaMensal = (Number(m.iptuParcela) || 0) + (Number(m.datiParcela) || 0);
+  const valor = ehCotaUnica
+    ? (Number(m.iptuCotaUnica) || 0) + (Number(m.datiCotaUnica) || 0)
+    : (Number(m.iptuTotalCalculado) || 0) + (Number(m.datiTotalCalculado) || 0);
 
   if (editando) {
     return (
@@ -294,7 +394,15 @@ function MembroRateioLinha({
   return (
     <li className="card">
       <button type="button" className="choice-item" onClick={onAbrir}>
-        I {m.codigo || '(sem código)'} — {m.nominalIptu || m.proprietario} — {formatarMoeda(valor)}
+        I {m.codigo || '(sem código)'} — {m.nominalIptu || m.proprietario}
+        {ehCotaUnica ? (
+          <> — {formatarMoeda(valor)} (cota única)</>
+        ) : (
+          <>
+            {' '}
+            — {formatarMoeda(parcelaMensal)}/parcela (total no ano: {formatarMoeda(valor)})
+          </>
+        )}
         {atual && ' (este)'}
       </button>
       {m.obs && <span className="meta"> {m.obs}</span>}
@@ -581,6 +689,25 @@ export default function Consulta() {
 
   function urlPreviewCarne(caminho) {
     return `${BACKEND_URL}/carnes/visualizar?path=${encodeURIComponent(caminho)}`;
+  }
+
+  // Relatório em PDF pra compartilhar com quem vai ajudar a lançar os
+  // carnês desse rateio (ver montarHtmlRelatorioRateio).
+  async function gerarRelatorioRateio(grupo) {
+    if (!grupo) return;
+    if (!window.electronAPI?.exportarPDF) {
+      window.alert('Disponível só no app desktop.');
+      return;
+    }
+    setError('');
+    const html = montarHtmlRelatorioRateio(grupo, config?.listas?.exercicio);
+    const nomeArquivo = `Lancamento - rateio ${grupo.rotuloContabil}.pdf`;
+    try {
+      const resultado = await window.electronAPI.exportarPDF(html, nomeArquivo);
+      if (resultado?.salvo) window.alert(`PDF salvo em: ${resultado.caminho}`);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    }
   }
 
   // Edição rápida de um membro do rateio (valores + forma de pagamento),
@@ -1261,6 +1388,9 @@ export default function Consulta() {
                   Dividir/editar valores desta inscrição
                 </button>
               )}
+              <button type="button" className="link-btn" onClick={() => gerarRelatorioRateio(grupoRateio)}>
+                Gerar relatório para lançamento
+              </button>
               {novoMembroRateio ? (
                 <NovoMembroRateioForm
                   dados={novoMembroRateio}
@@ -1517,6 +1647,13 @@ export default function Consulta() {
                   <li>DATI parcelado (total): <strong>{formatarMoeda(imovel.grupoRateio.totais.datiParcelado)}</strong></li>
                 )}
               </ul>
+              <button
+                type="button"
+                className="link-btn"
+                onClick={() => gerarRelatorioRateio(imovel.grupoRateio)}
+              >
+                Gerar relatório para lançamento
+              </button>
               {novoMembroRateio ? (
                 <NovoMembroRateioForm
                   dados={novoMembroRateio}

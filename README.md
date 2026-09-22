@@ -110,20 +110,28 @@ instalar assim que a atualização estiver pronta.
    tiver), em vez de uma lista solta que parece duplicação por engano. Se o imóvel fizer parte de
    um **imóvel de rateio** (campo "Imóvel de rateio" preenchido — o número
    usado no sistema contábil pra cobrar o proprietário, não um código
-   "I"), mostra um card com o valor de cada linha do grupo, se cada uma já
-   foi **lançada no sistema contábil** (com atalho pra marcar sem sair da
-   tela) e o total consolidado a lançar. Clicar em qualquer linha **abre
-   ela direto**, sem precisar voltar pra busca — navegação fluida entre
-   todos os "I" do mesmo rateio. O checkbox **"mostrar só pendentes"**
-   filtra pra quem ainda falta lançar, e o link **"+ Adicionar imóvel a
-   este rateio"** cadastra e já lança uma linha nova no grupo numa ação só
-   (útil quando uma unidade nova é cadastrada no sistema base depois do
-   carnê original — ex: um prédio de rateio que ainda não tinha todas as
-   unidades registradas). O link **"editar valores"** em cada linha abre um
-   formulário compacto ali mesmo (valores e forma de pagamento) sem
-   precisar abrir/navegar pro "I" individual. Tem também um botão pra
-   **remover uma linha do grupo** (não mexe nos valores já lançados, só
-   tira o rótulo). O botão
+   "I"), mostra um card com o valor de cada linha do grupo (deixa claro
+   quando é uma **parcela mensal** e qual é o **total no ano**, pra não
+   confundir os dois), se cada uma já foi **lançada no sistema contábil**
+   (com atalho pra marcar sem sair da tela) e o total consolidado a
+   lançar. Clicar em qualquer linha **abre ela direto**, sem precisar
+   voltar pra busca — navegação fluida entre todos os "I" do mesmo rateio.
+   O checkbox **"mostrar só pendentes"** filtra pra quem ainda falta
+   lançar, e o link **"+ Adicionar imóvel a este rateio"** cadastra e já
+   lança uma linha nova no grupo numa ação só (útil quando uma unidade
+   nova é cadastrada no sistema base depois do carnê original — ex: um
+   prédio de rateio que ainda não tinha todas as unidades registradas). O
+   link **"editar valores"** em cada linha abre um formulário compacto ali
+   mesmo (valores e forma de pagamento) sem precisar abrir/navegar pro "I"
+   individual, e **"ver carnê"** mostra o PDF salvo embutido na tela
+   (mesmo arquivo, já que um carnê de rateio cobre o grupo inteiro). Tem
+   também um botão pra **remover uma linha do grupo** (não mexe nos
+   valores já lançados, só tira o rótulo). O botão **"Gerar relatório para
+   lançamento"** exporta um PDF enxuto — número do rateio, cada "I" que o
+   compõe, o valor já lançado neste exercício e uma aproximação do próximo
+   (a provisão com reajuste) — pra compartilhar com quem for ajudar a
+   lançar os carnês reais desse rateio quando chegarem, sem precisar dar
+   acesso à planilha. O botão
    **"Dividir/editar valores desta inscrição"** junta todas as linhas "I"
    que compartilham a mesma inscrição num rateio e grava o valor de cada
    uma de uma vez — sem precisar re-enviar o PDF pelo assistente de
