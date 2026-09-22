@@ -291,6 +291,18 @@ export default function Upload() {
     return valorTotalDoItem(item, config?.listas?.nParcelas || 1);
   }
 
+  // Sugestão de valor por linha ao dividir igualmente entre N unidades.
+  // "total" já é o valor do ano inteiro (todas as parcelas somadas, ver
+  // valorTotalDoItem) - num carnê parcelado isso precisa ser dividido
+  // também pelo número de parcelas antes de virar a sugestão de "parcela"
+  // de cada linha, senão o valor mensal de cada unidade fica multiplicado
+  // por engano (total/n aplicado direto como parcela mensal soma a mais).
+  function sugestaoValorDivisao(total, n) {
+    if (total === null || !n) return '';
+    const nParcelas = item.formaPgto === 'Parcelado' ? config?.listas?.nParcelas || 1 : 1;
+    return String(Math.round((total / n / nParcelas) * 100) / 100);
+  }
+
   // "Quem paga" é obrigatório em cada linha, mas quase sempre é o mesmo
   // pra todo o grupo do rateio - evita ter que escolher uma por uma.
   function aplicarQuemPagaTodos(valor) {
@@ -323,7 +335,7 @@ export default function Upload() {
       const { data } = await api.get(`/rateios/${encodeURIComponent(rotulo.trim())}`);
       const total = valorTotalReferenciaRateio();
       const n = data.imoveis.length || 1;
-      const sugestao = total !== null ? String(Math.round((total / n) * 100) / 100) : '';
+      const sugestao = sugestaoValorDivisao(total, n);
       const membros = data.imoveis.map((m) =>
         membroVazio({
           codigo: String(m.codigo),
@@ -418,7 +430,7 @@ export default function Upload() {
       .find((v) => v !== null && v !== undefined && String(v).trim() !== '');
     const total = valorTotalReferenciaRateio();
     const n = (candidatos || []).length || 1;
-    const sugestao = total !== null ? String(Math.round((total / n) * 100) / 100) : '';
+    const sugestao = sugestaoValorDivisao(total, n);
     const membros = (candidatos || []).map((c) =>
       membroVazio({
         codigo: String(c.codigo),

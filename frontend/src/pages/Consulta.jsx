@@ -1,11 +1,20 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { api, apiErrorMessage } from '../api.js';
+import { api, apiErrorMessage, BACKEND_URL } from '../api.js';
 import { useModoLeitura } from '../App.jsx';
 
 function formatarMoeda(valor) {
   if (valor === null || valor === undefined || valor === '') return '—';
   return Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+// Label curto de valor pra distinguir, numa lista, guias diferentes do
+// mesmo código "I" (ex: 2 inscrições de IPTU na mesma linha do imóvel).
+function valorLabelResultado(r) {
+  const cotaUnica = r.formaPgto === 'Cota única';
+  const valor = cotaUnica ? r.iptuCotaUnica ?? r.datiCotaUnica : r.iptuParcela ?? r.datiParcela;
+  if (valor === null || valor === undefined || valor === '') return null;
+  return cotaUnica ? `${formatarMoeda(valor)} (cota única)` : `${formatarMoeda(valor)}/parcela`;
 }
 
 const CAMPOS_EDITAVEIS = [
@@ -145,13 +154,140 @@ function NovoMembroRateioForm({ dados, quemPagaOpcoes, onChange, onCancelar, onS
 // Uma linha de imóvel dentro de um grupo de rateio - abrir (navegação
 // fluida sem sair do contexto do rateio), status de lançado por tributo com
 // atalho pra marcar, e remover (quando aplicável).
-function MembroRateioLinha({ m, atual, onAbrir, onMarcarLancado, onRemover, modoLeitura }) {
+// Form compacto de edição dos valores de um membro do rateio, direto na
+// linha (sem navegar pro "I"). Só os campos de valor/forma de pagamento -
+// pra editar o resto (proprietário, inscrição etc.) ainda precisa abrir o
+// imóvel e usar "Editar".
+function MembroRateioEdicaoForm({ m, dados, onChange, onCancelar, onSalvar, salvando }) {
+  const temIptu = m.inscricaoIptu && m.inscricaoIptu !== 'Não tem';
+  const temDati = m.dati && m.dati !== 'Não tem';
+  return (
+    <div className="card">
+      <label>
+        Forma de pagamento
+        <select value={dados.formaPgto} onChange={(e) => onChange({ formaPgto: e.target.value })}>
+          <option value="Cota única">Cota única</option>
+          <option value="Parcelado">Parcelado</option>
+        </select>
+      </label>
+      {temIptu &&
+        (dados.formaPgto === 'Cota única' ? (
+          <label>
+            IPTU — cota única (R$)
+            <input
+              type="number"
+              step="0.01"
+              value={dados.iptuCotaUnica}
+              onChange={(e) => onChange({ iptuCotaUnica: e.target.value })}
+            />
+          </label>
+        ) : (
+          <>
+            <label>
+              IPTU — parcela (R$)
+              <input
+                type="number"
+                step="0.01"
+                value={dados.iptuParcela}
+                onChange={(e) => onChange({ iptuParcela: e.target.value })}
+              />
+            </label>
+            <label>
+              IPTU — última parcela (R$, deixe em branco se igual)
+              <input
+                type="number"
+                step="0.01"
+                value={dados.iptuUltimaParcela}
+                onChange={(e) => onChange({ iptuUltimaParcela: e.target.value })}
+              />
+            </label>
+          </>
+        ))}
+      {temDati &&
+        (dados.formaPgto === 'Cota única' ? (
+          <label>
+            DATI — cota única (R$)
+            <input
+              type="number"
+              step="0.01"
+              value={dados.datiCotaUnica}
+              onChange={(e) => onChange({ datiCotaUnica: e.target.value })}
+            />
+          </label>
+        ) : (
+          <>
+            <label>
+              DATI — parcela (R$)
+              <input
+                type="number"
+                step="0.01"
+                value={dados.datiParcela}
+                onChange={(e) => onChange({ datiParcela: e.target.value })}
+              />
+            </label>
+            <label>
+              DATI — última parcela (R$, deixe em branco se igual)
+              <input
+                type="number"
+                step="0.01"
+                value={dados.datiUltimaParcela}
+                onChange={(e) => onChange({ datiUltimaParcela: e.target.value })}
+              />
+            </label>
+          </>
+        ))}
+      <div className="actions-row">
+        <button type="button" className="link-btn" onClick={onCancelar} disabled={salvando}>
+          Cancelar
+        </button>
+        <button type="button" onClick={onSalvar} disabled={salvando}>
+          {salvando ? 'Salvando...' : 'Salvar'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MembroRateioLinha({
+  m,
+  atual,
+  onAbrir,
+  onMarcarLancado,
+  onRemover,
+  modoLeitura,
+  editando,
+  onIniciarEdicao,
+  onCancelarEdicao,
+  onSalvarEdicao,
+  formEdicao,
+  onChangeEdicao,
+  salvandoEdicao,
+}) {
   const temIptu = m.inscricaoIptu && m.inscricaoIptu !== 'Não tem';
   const temDati = m.dati && m.dati !== 'Não tem';
   const valor =
     m.formaPgto === 'Cota única'
       ? (Number(m.iptuCotaUnica) || 0) + (Number(m.datiCotaUnica) || 0)
       : (Number(m.iptuTotalCalculado) || 0) + (Number(m.datiTotalCalculado) || 0);
+
+  if (editando) {
+    return (
+      <li>
+        <p className="meta">
+          <strong>I {m.codigo || '(sem código)'} — {m.nominalIptu || m.proprietario}</strong>
+        </p>
+        <MembroRateioEdicaoForm
+          m={m}
+          dados={formEdicao}
+          onChange={onChangeEdicao}
+          onCancelar={onCancelarEdicao}
+          onSalvar={onSalvarEdicao}
+          salvando={salvandoEdicao}
+        />
+      </li>
+    );
+  }
+
   return (
     <li className="card">
       <button type="button" className="choice-item" onClick={onAbrir}>
@@ -188,10 +324,20 @@ function MembroRateioLinha({ m, atual, onAbrir, onMarcarLancado, onRemover, modo
           </>
         )}
       </div>
-      {!modoLeitura && onRemover && (
-        <button type="button" className="link-btn" onClick={onRemover}>
-          remover deste rateio
-        </button>
+      {!modoLeitura && (
+        <>
+          <button type="button" className="link-btn" onClick={onIniciarEdicao}>
+            editar valores
+          </button>
+          {onRemover && (
+            <>
+              {' · '}
+              <button type="button" className="link-btn" onClick={onRemover}>
+                remover deste rateio
+              </button>
+            </>
+          )}
+        </>
       )}
     </li>
   );
@@ -261,6 +407,19 @@ export default function Consulta() {
   const [novoMembroRateio, setNovoMembroRateio] = useState(null);
   const [salvandoNovoMembroRateio, setSalvandoNovoMembroRateio] = useState(false);
   const [soPendentesRateio, setSoPendentesRateio] = useState(false);
+
+  // Visualizador de PDF embutido: guarda o caminho do carnê aberto no
+  // momento (null = painel fechado). Reaproveitado tanto pelo "I" aberto
+  // quanto por um membro do rateio, sem precisar navegar até ele.
+  const [previewCarne, setPreviewCarne] = useState(null);
+
+  // Edição inline de um membro do rateio (sem precisar abrir o "I" via
+  // navegação) - guarda a chave do membro em edição e o rascunho dos
+  // campos, resolvido com PATCH /imoveis/:codigo (mesma rota da edição
+  // livre de um imóvel).
+  const [editandoMembroRateio, setEditandoMembroRateio] = useState(null);
+  const [formMembroRateio, setFormMembroRateio] = useState({});
+  const [salvandoMembroRateio, setSalvandoMembroRateio] = useState(false);
 
   const location = useLocation();
 
@@ -405,6 +564,63 @@ export default function Consulta() {
       await window.electronAPI.abrirArquivo(imovel.linkCarne);
     } else {
       window.alert(`Arquivo salvo em: ${imovel.linkCarne}`);
+    }
+  }
+
+  function urlPreviewCarne(caminho) {
+    return `${BACKEND_URL}/carnes/visualizar?path=${encodeURIComponent(caminho)}`;
+  }
+
+  // Edição rápida de um membro do rateio (valores + forma de pagamento),
+  // direto na linha, sem precisar abrir/navegar pro "I" individual.
+  function chaveMembroRateio(m) {
+    return `${m.codigo}-${m.inscricaoIptu || m.dati || ''}`;
+  }
+
+  function iniciarEdicaoMembroRateio(m) {
+    setError('');
+    setEditandoMembroRateio(chaveMembroRateio(m));
+    setFormMembroRateio({
+      formaPgto: m.formaPgto || 'Parcelado',
+      iptuCotaUnica: m.iptuCotaUnica ?? '',
+      iptuParcela: m.iptuParcela ?? '',
+      iptuUltimaParcela: m.iptuUltimaParcela ?? '',
+      datiCotaUnica: m.datiCotaUnica ?? '',
+      datiParcela: m.datiParcela ?? '',
+      datiUltimaParcela: m.datiUltimaParcela ?? '',
+    });
+  }
+
+  function cancelarEdicaoMembroRateio() {
+    setEditandoMembroRateio(null);
+    setFormMembroRateio({});
+  }
+
+  function atualizarFormMembroRateio(campos) {
+    setFormMembroRateio((prev) => ({ ...prev, ...campos }));
+  }
+
+  async function salvarEdicaoMembroRateio(m) {
+    setError('');
+    setSalvandoMembroRateio(true);
+    try {
+      const payload = {};
+      for (const [campo, valor] of Object.entries(formMembroRateio)) {
+        payload[campo] = String(valor);
+      }
+      await api.patch(`/imoveis/${encodeURIComponent(codigoNaUrl(m.codigo))}`, payload, {
+        params: m.inscricaoIptu || m.dati ? { inscricao: m.inscricaoIptu || m.dati } : undefined,
+      });
+      cancelarEdicaoMembroRateio();
+      if (imovel) {
+        await abrirImovel(imovel.codigo, imovel.inscricaoIptu || imovel.dati);
+      } else if (grupoRateio) {
+        await recarregarRateio(grupoRateio.rotuloContabil);
+      }
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setSalvandoMembroRateio(false);
     }
   }
 
@@ -557,10 +773,20 @@ export default function Consulta() {
     const total = Number(valorTotalDivisao);
     const divisor = Number(divisorDivisao) || membrosDivisao.length;
     if (isNaN(total) || !divisor || membrosDivisao.length === 0) return;
-    const sugestao = Math.round((total / divisor) * 100) / 100;
+    // "Valor total do carnê" é sempre o total do ano inteiro (mesmo sentido
+    // usado em todo o resto do app - ver calcTotal em excelStore.js). Num
+    // carnê parcelado, esse total já soma todas as parcelas - dividir só
+    // pelo número de unidades e aplicar o resultado como a parcela mensal
+    // de cada uma multiplicaria o valor por engano (parcela x nParcelas x
+    // divisor, em vez do total real). Divide também pelo número de
+    // parcelas nesse caso.
+    const nParcelas = formaPgtoDivisao === 'Parcelado' ? config?.listas?.nParcelas || 1 : 1;
+    const sugestao = Math.round((total / divisor / nParcelas) * 100) / 100;
     setMembrosDivisao((prev) =>
       prev.map((m) =>
-        formaPgtoDivisao === 'Cota única' ? { ...m, cotaUnica: String(sugestao) } : { ...m, parcela: String(sugestao) }
+        formaPgtoDivisao === 'Cota única'
+          ? { ...m, cotaUnica: String(sugestao) }
+          : { ...m, parcela: String(sugestao), ultimaParcela: '' }
       )
     );
   }
@@ -763,6 +989,15 @@ export default function Consulta() {
     }
   }
 
+  // Mesmo código "I" com 2+ guias de IPTU/DATI (inscrições diferentes) - a
+  // planilha grava isso como linhas separadas, mas mostrar como "N
+  // resultados" soltos parece um bug de duplicação. Agrupa como um só
+  // imóvel com abas por inscrição em vez de uma lista achatada repetida.
+  const mesmoCodigoEmTodos =
+    resultados.length > 1 &&
+    resultados[0].codigo != null &&
+    resultados.every((r) => r.codigo != null && String(r.codigo) === String(resultados[0].codigo));
+
   return (
     <div className="page">
       <h2>Consultar imóvel</h2>
@@ -836,7 +1071,7 @@ export default function Consulta() {
                   </label>
 
                   <label>
-                    Valor total do carnê (referência pra dividir igualmente)
+                    Valor total do carnê no ano (referência pra dividir igualmente)
                     <input
                       type="number"
                       step="0.01"
@@ -844,6 +1079,12 @@ export default function Consulta() {
                       onChange={(e) => setValorTotalDivisao(e.target.value)}
                     />
                   </label>
+                  {formaPgtoDivisao === 'Parcelado' && (
+                    <p className="meta">
+                      Some as {config?.listas?.nParcelas || '10'} parcelas do carnê (não só uma) — "dividir
+                      igualmente" já calcula sozinho a parcela mensal de cada linha.
+                    </p>
+                  )}
                   <label>
                     Dividir por quantas partes
                     <input
@@ -1049,6 +1290,13 @@ export default function Consulta() {
                           onAbrir={() => abrirImovel(m.codigo, m.inscricaoIptu || m.dati)}
                           onMarcarLancado={(tributo) => marcarLancadoMembro(m.codigo, m.inscricaoIptu || m.dati, tributo)}
                           modoLeitura={modoLeitura}
+                          editando={editandoMembroRateio === chaveMembroRateio(m)}
+                          onIniciarEdicao={() => iniciarEdicaoMembroRateio(m)}
+                          onCancelarEdicao={cancelarEdicaoMembroRateio}
+                          onSalvarEdicao={() => salvarEdicaoMembroRateio(m)}
+                          formEdicao={formMembroRateio}
+                          onChangeEdicao={atualizarFormMembroRateio}
+                          salvandoEdicao={salvandoMembroRateio}
                         />
                       ))}
                   </ul>
@@ -1059,7 +1307,33 @@ export default function Consulta() {
         </div>
       )}
 
-      {resultados.length > 1 && !imovel && !dividindo && (
+      {resultados.length > 1 && !imovel && !dividindo && mesmoCodigoEmTodos && (
+        <div className="card">
+          <h4>I {resultados[0].codigo} — {resultados[0].proprietario}</h4>
+          <p className="meta">
+            Esse código tem {resultados.length} guias de IPTU/DATI (inscrições diferentes) — escolha qual:
+          </p>
+          <ul className="resumo-list">
+            {resultados.map((r, i) => {
+              const valorLabel = valorLabelResultado(r);
+              return (
+                <li key={`${r.codigo}-${r.inscricaoIptu || r.dati || i}`}>
+                  <button
+                    className="choice-item"
+                    onClick={() => abrirImovel(r.codigo, r.inscricaoIptu || r.dati)}
+                  >
+                    Inscrição {r.inscricaoIptu || r.dati || 'sem inscrição'}
+                    {valorLabel && <> — {valorLabel}</>}
+                  </button>
+                  {r.obs && <span className="meta"> {r.obs}</span>}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {resultados.length > 1 && !imovel && !dividindo && !mesmoCodigoEmTodos && (
         <div className="card">
           <h4>{resultados.length} resultado(s)</h4>
           <ul className="resumo-list">
@@ -1182,7 +1456,28 @@ export default function Consulta() {
                 </li>
               )}
             </ul>
-            {imovel.linkCarne && <button onClick={abrirCarne}>Abrir carnê salvo</button>}
+            {imovel.linkCarne && (
+              <div className="actions-row">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPreviewCarne((prev) => (prev === imovel.linkCarne ? null : imovel.linkCarne))
+                  }
+                >
+                  {previewCarne === imovel.linkCarne ? 'Fechar visualização' : 'Visualizar carnê aqui'}
+                </button>
+                <button className="link-btn" onClick={abrirCarne}>
+                  Abrir no aplicativo padrão
+                </button>
+              </div>
+            )}
+            {previewCarne === imovel.linkCarne && imovel.linkCarne && (
+              <iframe
+                title="Carnê"
+                src={urlPreviewCarne(imovel.linkCarne)}
+                className="preview-carne"
+              />
+            )}
           </div>
 
           {imovel.grupoRateio && (
@@ -1253,6 +1548,13 @@ export default function Consulta() {
                             onMarcarLancado={(tributo) => marcarLancadoMembro(m.codigo, m.inscricaoIptu || m.dati, tributo)}
                             onRemover={atual ? undefined : () => removerDoRateio(m.codigo, m.inscricaoIptu || m.dati)}
                             modoLeitura={modoLeitura}
+                            editando={editandoMembroRateio === chaveMembroRateio(m)}
+                            onIniciarEdicao={() => iniciarEdicaoMembroRateio(m)}
+                            onCancelarEdicao={cancelarEdicaoMembroRateio}
+                            onSalvarEdicao={() => salvarEdicaoMembroRateio(m)}
+                            formEdicao={formMembroRateio}
+                            onChangeEdicao={atualizarFormMembroRateio}
+                            salvandoEdicao={salvandoMembroRateio}
                           />
                         );
                       })}

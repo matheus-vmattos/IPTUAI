@@ -21,6 +21,10 @@ export function apiErrorMessage(err) {
   return err?.response?.data?.error || err.message || 'Erro inesperado';
 }
 
+// Sem backend real na demo - export só pra manter a mesma "forma" de
+// api.js real e não quebrar imports (ex: visualizador de PDF embutido).
+export const BACKEND_URL = '';
+
 const LISTAS = {
   exercicio: 2026,
   nParcelas: 10,

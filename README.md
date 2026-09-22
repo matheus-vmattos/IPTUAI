@@ -97,13 +97,17 @@ instalar assim que a atualização estiver pronta.
 5. **Consultar**: busque por código, inscrição, proprietário **ou número
    do imóvel de rateio** para ver os valores atuais (cota única, parcela,
    total calculado, valor a pagar), marcar o tributo como lançado no
-   sistema contábil da empresa, abrir o PDF do carnê salvo, ou **editar
+   sistema contábil da empresa, **visualizar o PDF do carnê salvo direto
+   na tela** (sem precisar abrir o visualizador padrão do sistema — esse
+   continua disponível como alternativa), ou **editar
    livremente** qualquer campo do imóvel (útil pra corrigir algo sem
    precisar relançar o carnê inteiro). Buscar por um número de rateio abre
    um seletor: escolhe a inscrição (pode ter mais de uma sob o mesmo
    número) e depois o "I" dentro dela. Se a busca encontrar várias linhas
-   com o mesmo código, mostra a lista pra você escolher a certa (pela
-   inscrição). Se o imóvel fizer parte de
+   com o mesmo código (um "I" com mais de uma guia de IPTU/DATI — inscrições
+   diferentes na prefeitura), mostra um card só desse imóvel com uma opção
+   por inscrição (nome + valor da parcela/cota única ao lado, quando já
+   tiver), em vez de uma lista solta que parece duplicação por engano. Se o imóvel fizer parte de
    um **imóvel de rateio** (campo "Imóvel de rateio" preenchido — o número
    usado no sistema contábil pra cobrar o proprietário, não um código
    "I"), mostra um card com o valor de cada linha do grupo, se cada uma já
@@ -115,8 +119,11 @@ instalar assim que a atualização estiver pronta.
    este rateio"** cadastra e já lança uma linha nova no grupo numa ação só
    (útil quando uma unidade nova é cadastrada no sistema base depois do
    carnê original — ex: um prédio de rateio que ainda não tinha todas as
-   unidades registradas). Tem também um botão pra **remover uma linha do
-   grupo** (não mexe nos valores já lançados, só tira o rótulo). O botão
+   unidades registradas). O link **"editar valores"** em cada linha abre um
+   formulário compacto ali mesmo (valores e forma de pagamento) sem
+   precisar abrir/navegar pro "I" individual. Tem também um botão pra
+   **remover uma linha do grupo** (não mexe nos valores já lançados, só
+   tira o rótulo). O botão
    **"Dividir/editar valores desta inscrição"** junta todas as linhas "I"
    que compartilham a mesma inscrição num rateio e grava o valor de cada
    uma de uma vez — sem precisar re-enviar o PDF pelo assistente de
@@ -133,7 +140,12 @@ instalar assim que a atualização estiver pronta.
    controla o divisor de "dividir igualmente" de forma independente da
    quantidade de linhas — útil quando o número real de frações não bate
    com quantos "I" já estão cadastrados hoje (ex: 12 linhas na planilha
-   mas o valor tem que ser dividido por 16). O botão **"Excluir imóvel"** limpa todos os
+   mas o valor tem que ser dividido por 16). O **"Valor total do carnê"**
+   é sempre o total do ano inteiro (a soma de todas as parcelas, não só
+   uma) — num carnê parcelado, "dividir igualmente" já divide também pelo
+   número de parcelas do exercício antes de sugerir a parcela mensal de
+   cada linha, pra não multiplicar o valor por engano. Isso vale tanto
+   aqui quanto no fluxo de rateio de **Lançar**. O botão **"Excluir imóvel"** limpa todos os
    campos daquela linha (útil pra linha duplicada/errada, ex: uma linha
    órfã de antes do app existir, sem código "I", duplicando uma inscrição
    de outra linha) — pede **confirmação em dois passos** (aceitar o aviso

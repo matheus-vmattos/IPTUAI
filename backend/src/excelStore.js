@@ -328,6 +328,11 @@ async function listImoveis(query) {
       inscricaoIptu: fields.inscricaoIptu,
       dati: fields.dati,
       obs: fields.obs,
+      formaPgto: fields.formaPgto,
+      iptuCotaUnica: fields.iptuCotaUnica,
+      iptuParcela: fields.iptuParcela,
+      datiCotaUnica: fields.datiCotaUnica,
+      datiParcela: fields.datiParcela,
     });
     if (out.length >= 50) break;
   }

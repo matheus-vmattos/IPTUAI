@@ -120,12 +120,19 @@ function montarPayloadLancamento(item, tributo, extras) {
       throw Object.assign(new Error('Informe o valor da parcela'), { status: 400 });
     }
     payload.parcela = valor;
+    // Em branco = "última parcela igual à parcela normal" (como o rótulo do
+    // campo promete) - grava o mesmo valor explicitamente, em vez de deixar
+    // de enviar o campo. Do contrário, ao editar/dividir uma linha que já
+    // tinha uma última parcela diferente de antes, o valor antigo ficava
+    // "grudado" na planilha mesmo sem o usuário pedir isso.
     if (item.ultimaParcela !== undefined && item.ultimaParcela !== '') {
       const ultima = Number(item.ultimaParcela);
       if (Number.isNaN(ultima)) {
         throw Object.assign(new Error('Valor da última parcela inválido'), { status: 400 });
       }
       payload.ultimaParcela = ultima;
+    } else {
+      payload.ultimaParcela = valor;
     }
   }
 

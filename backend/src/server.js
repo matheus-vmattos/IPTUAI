@@ -11,6 +11,7 @@ const exercicioRoutes = require('./routes/exercicioRoutes');
 const rateiosRoutes = require('./routes/rateiosRoutes');
 const pendenciasRoutes = require('./routes/pendenciasRoutes');
 const provisaoRoutes = require('./routes/provisaoRoutes');
+const carnesRoutes = require('./routes/carnesRoutes');
 
 const app = express();
 app.use(cors());
@@ -42,6 +43,7 @@ app.use('/exercicio', exercicioRoutes);
 app.use('/rateios', rateiosRoutes);
 app.use('/pendencias', pendenciasRoutes);
 app.use('/provisao', provisaoRoutes);
+app.use('/carnes', carnesRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);
