@@ -393,10 +393,19 @@ export default function Upload() {
     }
   }
 
+  // Soma o TOTAL do ano de cada linha (não só o valor de uma parcela) -
+  // pra poder comparar com "Valor de referência do carnê" (que também é o
+  // total anual). Comparar parcela com total sempre acusava uma
+  // "diferença" enorme mesmo com a divisão certa, só porque um lado media
+  // uma parcela e o outro o ano inteiro.
   function somaMembrosRateio() {
+    const nParcelas = config?.listas?.nParcelas || 1;
     return item.rateioMembros.reduce((acc, m) => {
-      const v = item.formaPgto === 'Cota única' ? Number(m.cotaUnica) : Number(m.parcela);
-      return acc + (isNaN(v) ? 0 : v);
+      const total = valorTotalDoItem(
+        { formaPgto: item.formaPgto, cotaUnica: m.cotaUnica, parcela: m.parcela, ultimaParcela: m.ultimaParcela },
+        nParcelas
+      );
+      return acc + (total === null || isNaN(total) ? 0 : total);
     }, 0);
   }
 
@@ -888,8 +897,8 @@ export default function Upload() {
                     </select>
                   </label>
                   <p className="meta">
-                    Valor de referência do carnê: {formatarMoeda(valorTotalReferenciaRateio())} — soma das linhas
-                    abaixo: {formatarMoeda(somaMembrosRateio())}
+                    Valor de referência do carnê no ano: {formatarMoeda(valorTotalReferenciaRateio())} — soma do
+                    total anual das linhas abaixo: {formatarMoeda(somaMembrosRateio())}
                     {(() => {
                       const total = valorTotalReferenciaRateio();
                       const soma = somaMembrosRateio();

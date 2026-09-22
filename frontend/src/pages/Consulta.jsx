@@ -262,6 +262,9 @@ function MembroRateioLinha({
   formEdicao,
   onChangeEdicao,
   salvandoEdicao,
+  previewAberto,
+  onAlternarPreview,
+  urlPreview,
 }) {
   const temIptu = m.inscricaoIptu && m.inscricaoIptu !== 'Não tem';
   const temDati = m.dati && m.dati !== 'Não tem';
@@ -339,6 +342,15 @@ function MembroRateioLinha({
           )}
         </>
       )}
+      {m.linkCarne && (
+        <>
+          {' · '}
+          <button type="button" className="link-btn" onClick={onAlternarPreview}>
+            {previewAberto ? 'fechar carnê' : 'ver carnê'}
+          </button>
+        </>
+      )}
+      {previewAberto && m.linkCarne && <iframe title="Carnê" src={urlPreview} className="preview-carne" />}
     </li>
   );
 }
@@ -1297,6 +1309,11 @@ export default function Consulta() {
                           formEdicao={formMembroRateio}
                           onChangeEdicao={atualizarFormMembroRateio}
                           salvandoEdicao={salvandoMembroRateio}
+                          previewAberto={previewCarne === chaveMembroRateio(m)}
+                          onAlternarPreview={() =>
+                            setPreviewCarne((prev) => (prev === chaveMembroRateio(m) ? null : chaveMembroRateio(m)))
+                          }
+                          urlPreview={m.linkCarne ? urlPreviewCarne(m.linkCarne) : undefined}
                         />
                       ))}
                   </ul>
@@ -1460,18 +1477,16 @@ export default function Consulta() {
               <div className="actions-row">
                 <button
                   type="button"
-                  onClick={() =>
-                    setPreviewCarne((prev) => (prev === imovel.linkCarne ? null : imovel.linkCarne))
-                  }
+                  onClick={() => setPreviewCarne((prev) => (prev === 'imovel' ? null : 'imovel'))}
                 >
-                  {previewCarne === imovel.linkCarne ? 'Fechar visualização' : 'Visualizar carnê aqui'}
+                  {previewCarne === 'imovel' ? 'Fechar visualização' : 'Visualizar carnê aqui'}
                 </button>
                 <button className="link-btn" onClick={abrirCarne}>
                   Abrir no aplicativo padrão
                 </button>
               </div>
             )}
-            {previewCarne === imovel.linkCarne && imovel.linkCarne && (
+            {previewCarne === 'imovel' && imovel.linkCarne && (
               <iframe
                 title="Carnê"
                 src={urlPreviewCarne(imovel.linkCarne)}
@@ -1555,6 +1570,11 @@ export default function Consulta() {
                             formEdicao={formMembroRateio}
                             onChangeEdicao={atualizarFormMembroRateio}
                             salvandoEdicao={salvandoMembroRateio}
+                            previewAberto={previewCarne === chaveMembroRateio(m)}
+                            onAlternarPreview={() =>
+                              setPreviewCarne((prev) => (prev === chaveMembroRateio(m) ? null : chaveMembroRateio(m)))
+                            }
+                            urlPreview={m.linkCarne ? urlPreviewCarne(m.linkCarne) : undefined}
                           />
                         );
                       })}
